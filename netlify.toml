@@ -1,0 +1,4 @@
+build = "npm run build"
+publish = "dist"
+[redirects]
+  rules = [{source = "/*", destination = "/index.html", status = 200}]
