@@ -1,0 +1,1 @@
+{\n  "name": "gerenciador-inteligente-master-definitivo",\n  "version": "1.0.0",\n  "scripts": {\n    "dev": "vite",\n    "build": "vite build",\n    "serve": "vite preview"\n  },\n  "dependencies": {\n    "firebase": "^9.0.0",\n    "tailwindcss": "^2.0.0",\n    "postcss": "^8.0.0",\n    "vite": "^2.0.0"\n  },\n  "devDependencies": {\n    "typescript": "^4.0.0"\n  }\n}
