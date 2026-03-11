@@ -1,1 +1,22 @@
-{"name":"gerenciador-inteligente","private":true,"version":"1.0.0","type":"module","scripts":{"dev":"vite","build":"tsc -b && vite build","preview":"vite preview"},"dependencies":{"firebase":"^11.6.1","lucide":"^0.525.0"},"devDependencies":{"autoprefixer":"^10.4.20","postcss":"^8.5.3","tailwindcss":"^4.1.0","typescript":"^5.8.2","vite":"^6.2.1"}}
+{
+  "name": "gerenciador-inteligente",
+  "private": true,
+  "version": "1.0.0",
+  "type": "module",
+  "scripts": {
+    "dev": "vite",
+    "build": "tsc -b && vite build",
+    "preview": "vite preview"
+  },
+  "dependencies": {
+    "firebase": "^11.6.1",
+    "lucide": "^0.525.0"
+  },
+  "devDependencies": {
+    "autoprefixer": "^10.4.20",
+    "postcss": "^8.5.3",
+    "tailwindcss": "^4.1.0",
+    "typescript": "^5.8.2",
+    "vite": "^6.2.1"
+  }
+}
