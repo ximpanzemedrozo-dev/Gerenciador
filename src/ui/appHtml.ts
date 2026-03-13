@@ -206,25 +206,45 @@ export const appHtml = `
     </div>
   </div>
 
-  <!-- MODAL: IMPORTAR CLIENTE (1 bloco) -->
+  <!-- MODAL: IMPORTAR CLIENTES (multi-blocos + progresso) -->
   <div id="import-modal" class="modal-overlay" onclick="toggleModal('import-modal')">
     <div class="bg-white dark:bg-slate-900 w-full max-w-3xl rounded-[2.5rem] p-6 shadow-3xl max-h-[90vh] overflow-y-auto" onclick="event.stopPropagation()">
       <div class="flex items-start justify-between gap-4">
         <div>
-          <h2 class="text-2xl font-black italic uppercase text-sky-600 tracking-tighter">Importar Cliente</h2>
-          <p class="text-xs font-bold text-slate-400 uppercase tracking-widest mt-1">Cole o bloco e confirme</p>
+          <h2 class="text-2xl font-black italic uppercase text-sky-600 tracking-tighter">Importar Clientes</h2>
+          <p class="text-xs font-bold text-slate-400 uppercase tracking-widest mt-1">Cole vários blocos e importe</p>
         </div>
         <button onclick="toggleModal('import-modal')" class="text-slate-400 font-black">Fechar</button>
       </div>
 
       <div class="mt-5">
-        <label class="text-[10px] font-black uppercase text-slate-400 mb-2 block ml-1">Texto do painel</label>
-        <textarea id="import-text" class="w-full rounded-2xl border border-slate-200 p-4 font-mono text-xs min-h-[220px]"></textarea>
+        <label class="text-[10px] font-black uppercase text-slate-400 mb-2 block ml-1">Texto do painel (1 ou vários clientes)</label>
+        <textarea id="import-text" class="w-full rounded-2xl border border-slate-200 p-4 font-mono text-xs min-h-[240px]"></textarea>
+      </div>
+
+      <!-- Progresso -->
+      <div class="mt-4 rounded-2xl border border-slate-200 bg-slate-50 p-4">
+        <div class="flex items-center justify-between gap-3">
+          <div class="text-[10px] font-black uppercase tracking-[0.3em] text-slate-400">Progresso</div>
+          <div id="import-status" class="text-xs font-bold text-slate-500">0/0</div>
+        </div>
+
+        <div class="h-3 rounded-full bg-slate-200 overflow-hidden mt-2">
+          <div id="import-bar" class="h-3 bg-sky-500 w-0"></div>
+        </div>
+
+        <div id="import-log" class="text-xs text-slate-500 mt-3 whitespace-pre-wrap"></div>
       </div>
 
       <div class="grid grid-cols-2 gap-3 mt-4">
-        <button onclick="previewImport()" class="bg-slate-900 text-white py-4 rounded-2xl font-black uppercase tracking-widest">Prévia</button>
+        <button onclick="previewImport()" class="bg-slate-900 text-white py-4 rounded-2xl font-black uppercase tracking-widest">Prévia (1º bloco)</button>
         <button onclick="applyImportToClientForm()" class="bg-sky-500 text-white py-4 rounded-2xl font-black uppercase tracking-widest">Usar no Form</button>
+      </div>
+
+      <div class="mt-3">
+        <button onclick="importClientsFromText()" class="w-full bg-emerald-600 text-white py-4 rounded-2xl font-black uppercase tracking-widest">
+          Importar Tudo
+        </button>
       </div>
 
       <div class="mt-5 rounded-2xl border border-slate-200 bg-slate-50 p-4">
@@ -234,7 +254,7 @@ export const appHtml = `
     </div>
   </div>
 
-  <!-- MODAL: REVENDAS (mantido) -->
+  <!-- MODAL: REVENDAS -->
   <div id="revenda-modal" class="modal-overlay" onclick="toggleModal('revenda-modal')">
     <div class="bg-white dark:bg-slate-900 w-full max-w-3xl rounded-[2.5rem] p-6 shadow-3xl max-h-[90vh] overflow-y-auto" onclick="event.stopPropagation()">
       <div class="flex items-start justify-between gap-4">
