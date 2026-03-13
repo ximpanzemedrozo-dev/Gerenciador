@@ -10,16 +10,11 @@ declare global {
   }
 }
 
-// bridge global (mantém compatibilidade com o seu código legado)
 window.sigmaDB = { db, appId, auth, ...firebaseApi };
 
-// injeta o HTML do app (body inteiro vira template string)
 const root = document.getElementById("app");
-if (!root) throw new Error("#app não encontrado no index.html");
+if (!root) throw new Error("#app não encontrado");
 root.innerHTML = appHtml;
 
-// renderiza os ícones (lucide)
 createIcons({ icons });
-
-// instala handlers + listeners (auth, botões etc.)
 installLegacyApp();
