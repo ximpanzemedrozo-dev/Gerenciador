@@ -47,7 +47,7 @@ let selectedClientIds = new Set<string>();
 const CASINHA_COST: Record<string, number> = { Vision: 2.0, Starplay: 2.5 };
 const FULL_SERVERS_LIST = ["Starplay", "Vision", "Primelux", "Play Tv", "Blast Elite", "Blast Flash", "Havok Radeon", "Havok Kyros", "Havok Andromeda", "Havok Neon", "Allbox", "Ryzeen", "Titan"];
 
-// ---------- Helpers de Formatação ----------
+// ---------- Helpers ----------
 function money(n: number) {
   return `R$ ${n.toLocaleString("pt-BR", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
 }
@@ -81,7 +81,7 @@ function normalizeServerName(text: string): string {
   return "Outros";
 }
 
-// ---------- Lógica de Barra Superior (Mensalistas Apenas) ----------
+// ---------- Barra Superior (Somente Mensalistas) ----------
 function refreshTopProfitBar() {
   const totalPlansEl = document.getElementById("top-total-plans");
   const totalCasinhasEl = document.getElementById("top-total-casinhas");
@@ -90,9 +90,7 @@ function refreshTopProfitBar() {
 
   if (!totalPlansEl || !totalCasinhasEl || !realProfitEl) return;
 
-  // REGRA: Somente mensalistas entram no cálculo do lucro do topo
   const mensalistas = clients.filter(c => (c.cycle || "mensal") === "mensal");
-
   const totalPlans = mensalistas.reduce((acc, c) => acc + (Number(c.plano) || 0), 0);
 
   let qtdStarplay = 0;
@@ -160,7 +158,7 @@ window.switchView = (v) => {
 
 window.toggleModal = (id) => document.getElementById(id)?.classList.toggle("active");
 
-// ---------- Clientes (CRUD e Listagem) ----------
+// ---------- Clientes ----------
 function getFilteredClients() {
   const q = (document.getElementById("clients-search") as HTMLInputElement)?.value.toLowerCase().trim() || "";
   const srv = (document.getElementById("clients-filter-server") as HTMLSelectElement)?.value || "";
@@ -245,7 +243,7 @@ window.saveClient = async () => {
 
 window.deleteClient = async (id) => { if (currentUserId && confirm("Deseja apagar este cliente?")) await firebaseApi.deleteDoc(firebaseApi.doc(db, "artifacts", appId, "users", currentUserId, "clients", id)); };
 
-// ---------- Importação Inteligente ----------
+// ---------- Importação ----------
 function parseClientBlock(text: string, forcedServer: string): Partial<Client> {
   const lines = text.split("\n").map(l => l.trim()).filter(Boolean);
   const result: Partial<Client> = { painel: forcedServer || normalizeServerName(text), cycle: "mensal", plano: 20 };
@@ -284,16 +282,19 @@ window.importClientsFromText = async () => {
 
   for (let i = 0; i < blocks.length; i++) {
     const data = parseClientBlock(blocks[i], srv);
-    await firebaseApi.addDoc(firebaseApi.collection(db, "artifacts", appId, "users", currentUserId, "clients"), { ...data, createdAt: new Date().toISOString() });
+    await firebaseApi.addDoc(firebaseApi.collection(db, "artifacts", appId, "users", currentUserId, "clients"), { 
+      ...data, 
+      createdAt: new Date().toISOString() 
+    });
     const pct = Math.round(((i + 1) / blocks.length) * 100);
-    if (bar) bar.style.width = \`\${pct}%\`;
-    if (status) status.textContent = \`\${i + 1}/\${blocks.length}\`;
+    if (bar) bar.style.width = `${pct}%`;
+    if (status) status.textContent = `${i + 1}/${blocks.length}`;
   }
   alert("Concluído!");
   window.toggleModal("import-modal");
 };
 
-// ---------- Financeiro e Escuta Realtime ----------
+// ---------- Ganhos e Financeiro ----------
 window.refreshFinance = () => {
   document.getElementById("fin-total-clients")!.textContent = String(clients.length);
   const dueSoon = clients.filter(c => c.venc && daysBetween(isoToday(), c.venc) <= 7).length;
@@ -301,16 +302,16 @@ window.refreshFinance = () => {
 
   const breakdown: Record<string, number> = {};
   clients.forEach(c => {
-    const k = \`\${c.painel || "Outros"} (\${c.cycle || "mensal"})\`;
+    const k = `${c.painel || "Outros"} (${c.cycle || "mensal"})`;
     breakdown[k] = (breakdown[k] || 0) + (c.plano || 0);
   });
 
-  document.getElementById("fin-breakdown")!.innerHTML = Object.entries(breakdown).map(([k, v]) => \`
+  document.getElementById("fin-breakdown")!.innerHTML = Object.entries(breakdown).map(([k, v]) => `
     <div class="flex justify-between border-b py-2">
-      <span class="text-xs font-bold text-slate-500 uppercase">\${k}</span>
-      <span class="text-xs font-black text-slate-900">\${money(v)}</span>
+      <span class="text-xs font-bold text-slate-500 uppercase">${k}</span>
+      <span class="text-xs font-black text-slate-900">${money(v)}</span>
     </div>
-  \`).join("");
+  `).join("");
 };
 
 window.startListening = (userId) => {
