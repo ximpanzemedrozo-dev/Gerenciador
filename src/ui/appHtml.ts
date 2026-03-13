@@ -29,9 +29,9 @@ export const appHtml = `
     </header>
 
     <div class="px-4 mt-4">
-      <div class="max-w-7xl mx-auto rounded-2xl border border-slate-200 bg-white/95 dark:bg-slate-900/90 p-4 grid grid-cols-1 md:grid-cols-3 gap-4">
+      <div class="max-w-7xl mx-auto rounded-2xl border border-slate-200 bg-white/95 dark:bg-slate-900/90 p-4 grid grid-cols-1 md:grid-cols-3 gap-4 shadow-sm">
         <div>
-          <div class="text-[10px] font-black uppercase text-slate-400">Custo mensalistas</div>
+          <div class="text-[10px] font-black uppercase text-slate-400">Custo mensal (Starplay/Vision)</div>
           <div id="top-total-casinhas" class="text-2xl font-black text-rose-500">R$ 0,00</div>
         </div>
         <div>
@@ -59,40 +59,51 @@ export const appHtml = `
         <div id="clients-bulkbar" class="hidden mb-4 p-3 bg-sky-50 dark:bg-sky-900/20 border border-sky-100 dark:border-sky-900/30 rounded-2xl flex flex-wrap gap-3 justify-between items-center">
            <span class="text-xs font-bold text-sky-700 dark:text-sky-400">Selecionados: <span id="clients-bulk-count">0</span></span>
            <div class="flex gap-2">
-             <button onclick="bulkSelectAllFilteredClients()" class="bg-sky-500 text-white px-3 py-1 rounded-lg text-[10px] font-bold uppercase">Selecionar Todos</button>
-             <button onclick="bulkDeleteSelectedClients()" class="bg-red-500 text-white px-3 py-1 rounded-lg text-[10px] font-bold uppercase">Apagar Selecionados</button>
-             <button onclick="toggleBulkSelectClients(false)" class="text-slate-500 dark:text-slate-400 text-[10px] font-bold uppercase">Cancelar</button>
+             <button onclick="bulkSelectAllFilteredClients()" class="bg-sky-500 text-white px-3 py-1 rounded-lg text-[10px] font-bold uppercase">Todos</button>
+             <button onclick="bulkDeleteSelectedClients()" class="bg-red-500 text-white px-3 py-1 rounded-lg text-[10px] font-bold uppercase">Apagar</button>
+             <button onclick="toggleBulkSelectClients(false)" class="text-slate-500 text-[10px] font-bold uppercase">Sair</button>
            </div>
         </div>
 
         <div id="clients-list" class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4"></div>
       </section>
 
+      <section id="view-revendas" class="view-section hidden">
+        <div class="flex justify-between items-center mb-4">
+          <h2 class="text-2xl font-black italic uppercase">Revendas</h2>
+          <button onclick="openAddRevenda()" class="bg-sky-500 text-white px-4 py-2 rounded-xl font-black text-xs uppercase">Adicionar Parceiro</button>
+        </div>
+        <div id="revendas-list" class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4"></div>
+      </section>
+
       <section id="view-finance" class="view-section hidden">
-        <h2 class="text-2xl font-black uppercase mb-4">Ganhos Gerais</h2>
-        <div id="fin-breakdown" class="space-y-2 bg-white dark:bg-slate-900 p-6 rounded-2xl border border-slate-200 dark:border-slate-800"></div>
+        <h2 class="text-2xl font-black uppercase mb-4">Resumo Financeiro</h2>
+        <div id="fin-breakdown" class="space-y-2 bg-white dark:bg-slate-900 p-6 rounded-2xl border border-slate-200 dark:border-slate-800 shadow-sm"></div>
       </section>
     </main>
 
-    <nav class="fixed bottom-0 left-0 right-0 bg-white/95 dark:bg-slate-950/95 border-t dark:border-slate-800 h-20 flex justify-around items-center z-50">
-      <button onclick="switchView('clients')" id="nav-clients" class="nav-btn active"><i data-lucide="users"></i><span class="text-[10px] block">Início</span></button>
-      <button onclick="switchView('finance')" id="nav-finance" class="nav-btn"><i data-lucide="wallet"></i><span class="text-[10px] block">Ganhos</span></button>
+    <nav class="fixed bottom-0 left-0 right-0 bg-white/95 dark:bg-slate-950/95 border-t dark:border-slate-800 h-20 flex justify-around items-center z-50 px-2">
+      <button onclick="switchView('clients')" id="nav-clients" class="nav-btn active">
+        <i data-lucide="users"></i><span class="text-[9px] uppercase font-bold block mt-1">Clientes</span>
+      </button>
+      <button onclick="switchView('revendas')" id="nav-revendas" class="nav-btn">
+        <i data-lucide="briefcase"></i><span class="text-[9px] uppercase font-bold block mt-1">Revendas</span>
+      </button>
+      <button onclick="switchView('finance')" id="nav-finance" class="nav-btn">
+        <i data-lucide="wallet"></i><span class="text-[9px] uppercase font-bold block mt-1">Ganhos</span>
+      </button>
     </nav>
   </div>
 
   <div id="client-modal" class="modal-overlay" onclick="toggleModal('client-modal')">
-    <div class="bg-white dark:bg-slate-900 w-full max-w-3xl rounded-[2.5rem] p-6 shadow-3xl max-h-[90vh] overflow-y-auto" onclick="event.stopPropagation()">
-      <div class="flex items-start justify-between gap-4">
-        <h2 id="client-modal-title" class="text-2xl font-black italic uppercase text-sky-600 tracking-tighter">Cliente</h2>
-        <button onclick="toggleModal('client-modal')" class="text-slate-400 font-black">Fechar</button>
-      </div>
+    <div class="bg-white dark:bg-slate-900 w-full max-w-3xl rounded-[2rem] p-6 max-h-[90vh] overflow-y-auto" onclick="event.stopPropagation()">
+      <h2 id="client-modal-title" class="text-2xl font-black uppercase text-sky-600 mb-6">Cliente</h2>
       <input type="hidden" id="client-edit-id" />
-      <div class="grid grid-cols-1 md:grid-cols-2 gap-3 mt-5">
-        <div><label class="text-[10px] font-black uppercase text-slate-400 mb-2 block ml-1">Nome</label><input id="client-nome" class="input-box" /></div>
-        <div><label class="text-[10px] font-black uppercase text-slate-400 mb-2 block ml-1">ID Externo</label><input id="client-idext" class="input-box" /></div>
-        <div><label class="text-[10px] font-black uppercase text-slate-400 mb-2 block ml-1">Painel</label><input id="client-painel" class="input-box" /></div>
-        <div>
-          <label class="text-[10px] font-black uppercase text-slate-400 mb-2 block ml-1">Ciclo</label>
+      <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+        <div><label class="text-[10px] font-black uppercase text-slate-400 mb-1 block">Nome</label><input id="client-nome" class="input-box" /></div>
+        <div><label class="text-[10px] font-black uppercase text-slate-400 mb-1 block">ID Externo</label><input id="client-idext" class="input-box" /></div>
+        <div><label class="text-[10px] font-black uppercase text-slate-400 mb-1 block">Painel</label><input id="client-painel" class="input-box" /></div>
+        <div><label class="text-[10px] font-black uppercase text-slate-400 mb-1 block">Ciclo</label>
           <select id="client-cycle" class="filter-select">
             <option value="mensal">Mensal</option>
             <option value="bimestral">Bimestral</option>
@@ -101,52 +112,66 @@ export const appHtml = `
             <option value="anual">Anual</option>
           </select>
         </div>
-        <div><label class="text-[10px] font-black uppercase text-slate-400 mb-2 block ml-1">Vencimento</label><input id="client-venc" type="date" class="input-box" /></div>
-        <div><label class="text-[10px] font-black uppercase text-slate-400 mb-2 block ml-1">Plano (R$)</label><input id="client-plano" class="input-box" value="20.00" /></div>
-        <div>
-          <label class="text-[10px] font-black uppercase text-slate-400 mb-2 block ml-1">Status</label>
-          <select id="client-status" class="filter-select">
-            <option value="Ativo">Ativo</option>
-            <option value="Inativo">Inativo</option>
-          </select>
-        </div>
+        <div><label class="text-[10px] font-black uppercase text-slate-400 mb-1 block">Vencimento</label><input id="client-venc" type="date" class="input-box" /></div>
+        <div><label class="text-[10px] font-black uppercase text-slate-400 mb-1 block">Plano (R$)</label><input id="client-plano" class="input-box" /></div>
       </div>
-      <div class="grid grid-cols-2 gap-3 mt-6">
-        <button onclick="saveClient()" class="bg-sky-500 text-white py-4 rounded-2xl font-black uppercase tracking-widest">Guardar</button>
-        <button onclick="toggleModal('client-modal')" class="bg-slate-200 text-slate-600 py-4 rounded-2xl font-black uppercase tracking-widest">Cancelar</button>
+      <div class="flex gap-3 mt-8">
+        <button onclick="saveClient()" class="flex-1 bg-sky-500 text-white py-4 rounded-2xl font-black uppercase">Salvar</button>
+        <button onclick="toggleModal('client-modal')" class="flex-1 bg-slate-100 text-slate-500 py-4 rounded-2xl font-black uppercase">Cancelar</button>
       </div>
     </div>
   </div>
 
   <div id="import-modal" class="modal-overlay" onclick="toggleModal('import-modal')">
     <div class="bg-white dark:bg-slate-900 w-full max-w-2xl rounded-3xl p-6 shadow-2xl overflow-y-auto max-h-[90vh]" onclick="event.stopPropagation()">
-      <h2 class="text-2xl font-black uppercase mb-4 text-sky-600">Importação Inteligente</h2>
-      
+      <h2 class="text-2xl font-black uppercase mb-4 text-sky-600">Importação Completa</h2>
       <div class="mb-4">
-        <label class="text-[10px] font-black uppercase text-slate-400 mb-2 block ml-1">Servidor de Destino</label>
+        <label class="text-[10px] font-black uppercase text-slate-400 mb-1 block">Servidor de Destino (Forçar)</label>
         <select id="import-target-server" class="filter-select">
-          <option value="">Automático (Detectar do texto)</option>
+          <option value="">Automático</option>
           <option value="Starplay">Starplay</option>
           <option value="Vision">Vision</option>
           <option value="Primelux">Primelux</option>
+          <option value="Play Tv">Play Tv</option>
           <option value="Blast Elite">Blast Elite</option>
+          <option value="Blast Flash">Blast Flash</option>
+          <option value="Havok Radeon">Havok Radeon</option>
+          <option value="Havok Kyros">Havok Kyros</option>
+          <option value="Havok Andromeda">Havok Andromeda</option>
+          <option value="Havok Neon">Havok Neon</option>
+          <option value="Allbox">Allbox</option>
+          <option value="Ryzeen">Ryzeen</option>
+          <option value="Titan">Titan</option>
         </select>
       </div>
-
-      <textarea id="import-text" class="w-full h-64 p-4 border dark:border-slate-700 bg-slate-50 dark:bg-slate-800 rounded-2xl font-mono text-[11px] mb-4 outline-none" placeholder="Cole a lista do painel..."></textarea>
-      
-      <div id="import-status-area" class="hidden mb-4 p-4 bg-slate-50 dark:bg-slate-800 rounded-2xl border border-slate-100">
-        <div id="import-status" class="text-[10px] font-black uppercase text-slate-500 mb-2">Processando...</div>
+      <textarea id="import-text" class="w-full h-64 p-4 border dark:border-slate-700 bg-slate-50 dark:bg-slate-800 rounded-2xl font-mono text-[11px] mb-4 outline-none" placeholder="Cole os blocos do painel aqui..."></textarea>
+      <div id="import-status-area" class="hidden mb-4 p-4 bg-slate-100 dark:bg-slate-800 rounded-2xl border border-slate-200">
+        <div id="import-status" class="text-[10px] font-black uppercase text-slate-500 mb-1">Iniciando...</div>
         <div class="h-2 bg-slate-200 dark:bg-slate-700 rounded-full overflow-hidden">
           <div id="import-bar" class="h-full bg-sky-500 w-0"></div>
         </div>
       </div>
-
       <div class="grid grid-cols-2 gap-3">
         <button onclick="previewImport()" class="bg-slate-800 text-white py-4 rounded-xl font-bold uppercase text-xs">Testar</button>
-        <button onclick="importClientsFromText()" class="bg-sky-500 text-white py-4 rounded-xl font-bold uppercase text-xs">Importar Tudo</button>
+        <button onclick="importClientsFromText()" class="bg-sky-500 text-white py-4 rounded-xl font-bold uppercase text-xs">Importar Lista</button>
       </div>
-      <pre id="import-preview" class="mt-4 p-3 bg-slate-50 dark:bg-slate-800 rounded-xl text-[10px] overflow-auto max-h-32 border dark:border-slate-700"></pre>
+      <pre id="import-preview" class="mt-4 p-4 bg-slate-50 dark:bg-slate-800 rounded-xl text-[10px] border dark:border-slate-700 max-h-40 overflow-auto"></pre>
+    </div>
+  </div>
+
+  <div id="revenda-modal" class="modal-overlay" onclick="toggleModal('revenda-modal')">
+    <div class="bg-white dark:bg-slate-900 w-full max-w-xl rounded-3xl p-6" onclick="event.stopPropagation()">
+      <h2 id="revenda-modal-title" class="text-2xl font-black uppercase text-sky-600 mb-6">Nova Revenda</h2>
+      <input type="hidden" id="revenda-edit-id" />
+      <div class="space-y-4">
+        <div><label class="text-[10px] font-black uppercase text-slate-400 mb-1 block">Nome do Parceiro</label><input id="revenda-nome" class="input-box" /></div>
+        <div><label class="text-[10px] font-black uppercase text-slate-400 mb-1 block">Painel Utilizado</label><input id="revenda-painel" class="input-box" /></div>
+        <div><label class="text-[10px] font-black uppercase text-slate-400 mb-1 block">Custo por Crédito (R$)</label><input id="revenda-custo" class="input-box" placeholder="Ex: 5.00" /></div>
+      </div>
+      <div class="flex gap-3 mt-8">
+        <button onclick="saveRevenda()" class="flex-1 bg-sky-500 text-white py-4 rounded-2xl font-black uppercase">Salvar</button>
+        <button onclick="toggleModal('revenda-modal')" class="flex-1 bg-slate-100 text-slate-500 py-4 rounded-2xl font-black uppercase">Cancelar</button>
+      </div>
     </div>
   </div>
 `;
