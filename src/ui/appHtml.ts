@@ -29,17 +29,17 @@ export const appHtml = `
     </header>
 
     <div class="px-4 mt-4">
-      <div class="max-w-7xl mx-auto rounded-2xl border border-slate-200 bg-white/95 p-4 grid grid-cols-1 md:grid-cols-3 gap-4">
+      <div class="max-w-7xl mx-auto rounded-2xl border border-slate-200 bg-white/95 dark:bg-slate-900/90 p-4 grid grid-cols-1 md:grid-cols-3 gap-4">
         <div>
-          <div class="text-[10px] font-black uppercase text-slate-400">Custo Mensalistas</div>
+          <div class="text-[10px] font-black uppercase text-slate-400">Custo mensalistas</div>
           <div id="top-total-casinhas" class="text-2xl font-black text-rose-500">R$ 0,00</div>
         </div>
         <div>
-          <div class="text-[10px] font-black uppercase text-slate-400">Total Mensalistas</div>
-          <div id="top-total-plans" class="text-2xl font-black text-slate-900">R$ 0,00</div>
+          <div class="text-[10px] font-black uppercase text-slate-400">Faturamento Mensal</div>
+          <div id="top-total-plans" class="text-2xl font-black text-slate-900 dark:text-white">R$ 0,00</div>
         </div>
         <div>
-          <div class="text-[10px] font-black uppercase text-slate-400">Lucro Líquido</div>
+          <div class="text-[10px] font-black uppercase text-slate-400">Lucro Líquido Mensal</div>
           <div id="top-real-profit" class="text-2xl font-black text-emerald-600">R$ 0,00</div>
         </div>
       </div>
@@ -80,28 +80,73 @@ export const appHtml = `
     </nav>
   </div>
 
+  <div id="client-modal" class="modal-overlay" onclick="toggleModal('client-modal')">
+    <div class="bg-white dark:bg-slate-900 w-full max-w-3xl rounded-[2.5rem] p-6 shadow-3xl max-h-[90vh] overflow-y-auto" onclick="event.stopPropagation()">
+      <div class="flex items-start justify-between gap-4">
+        <h2 id="client-modal-title" class="text-2xl font-black italic uppercase text-sky-600 tracking-tighter">Cliente</h2>
+        <button onclick="toggleModal('client-modal')" class="text-slate-400 font-black">Fechar</button>
+      </div>
+      <input type="hidden" id="client-edit-id" />
+      <div class="grid grid-cols-1 md:grid-cols-2 gap-3 mt-5">
+        <div><label class="text-[10px] font-black uppercase text-slate-400 mb-2 block ml-1">Nome</label><input id="client-nome" class="input-box" /></div>
+        <div><label class="text-[10px] font-black uppercase text-slate-400 mb-2 block ml-1">ID Externo</label><input id="client-idext" class="input-box" /></div>
+        <div><label class="text-[10px] font-black uppercase text-slate-400 mb-2 block ml-1">Painel</label><input id="client-painel" class="input-box" /></div>
+        <div>
+          <label class="text-[10px] font-black uppercase text-slate-400 mb-2 block ml-1">Ciclo</label>
+          <select id="client-cycle" class="filter-select">
+            <option value="mensal">Mensal</option>
+            <option value="bimestral">Bimestral</option>
+            <option value="trimestral">Trimestral</option>
+            <option value="semestral">Semestral</option>
+            <option value="anual">Anual</option>
+          </select>
+        </div>
+        <div><label class="text-[10px] font-black uppercase text-slate-400 mb-2 block ml-1">Vencimento</label><input id="client-venc" type="date" class="input-box" /></div>
+        <div><label class="text-[10px] font-black uppercase text-slate-400 mb-2 block ml-1">Plano (R$)</label><input id="client-plano" class="input-box" value="20.00" /></div>
+        <div>
+          <label class="text-[10px] font-black uppercase text-slate-400 mb-2 block ml-1">Status</label>
+          <select id="client-status" class="filter-select">
+            <option value="Ativo">Ativo</option>
+            <option value="Inativo">Inativo</option>
+          </select>
+        </div>
+      </div>
+      <div class="grid grid-cols-2 gap-3 mt-6">
+        <button onclick="saveClient()" class="bg-sky-500 text-white py-4 rounded-2xl font-black uppercase tracking-widest">Guardar</button>
+        <button onclick="toggleModal('client-modal')" class="bg-slate-200 text-slate-600 py-4 rounded-2xl font-black uppercase tracking-widest">Cancelar</button>
+      </div>
+    </div>
+  </div>
+
   <div id="import-modal" class="modal-overlay" onclick="toggleModal('import-modal')">
     <div class="bg-white dark:bg-slate-900 w-full max-w-2xl rounded-3xl p-6 shadow-2xl overflow-y-auto max-h-[90vh]" onclick="event.stopPropagation()">
       <h2 class="text-2xl font-black uppercase mb-4 text-sky-600">Importação Inteligente</h2>
-      <p class="text-[10px] font-bold text-slate-400 uppercase mb-4 tracking-widest">Cole a lista completa do painel abaixo</p>
-      <textarea id="import-text" class="w-full h-64 p-4 border dark:border-slate-700 bg-slate-50 dark:bg-slate-800 rounded-2xl font-mono text-[11px] mb-4 outline-none focus:ring-2 ring-sky-500" placeholder="Ex: 778897151..."></textarea>
       
-      <div id="import-status-area" class="hidden mb-4 p-4 bg-slate-50 dark:bg-slate-800 rounded-2xl border border-slate-100 dark:border-slate-700">
-        <div id="import-status" class="text-[10px] font-black uppercase text-slate-500 mb-2">Processando clientes...</div>
+      <div class="mb-4">
+        <label class="text-[10px] font-black uppercase text-slate-400 mb-2 block ml-1">Servidor de Destino</label>
+        <select id="import-target-server" class="filter-select">
+          <option value="">Automático (Detectar do texto)</option>
+          <option value="Starplay">Starplay</option>
+          <option value="Vision">Vision</option>
+          <option value="Primelux">Primelux</option>
+          <option value="Blast Elite">Blast Elite</option>
+        </select>
+      </div>
+
+      <textarea id="import-text" class="w-full h-64 p-4 border dark:border-slate-700 bg-slate-50 dark:bg-slate-800 rounded-2xl font-mono text-[11px] mb-4 outline-none" placeholder="Cole a lista do painel..."></textarea>
+      
+      <div id="import-status-area" class="hidden mb-4 p-4 bg-slate-50 dark:bg-slate-800 rounded-2xl border border-slate-100">
+        <div id="import-status" class="text-[10px] font-black uppercase text-slate-500 mb-2">Processando...</div>
         <div class="h-2 bg-slate-200 dark:bg-slate-700 rounded-full overflow-hidden">
-          <div id="import-bar" class="h-full bg-sky-500 w-0 transition-all duration-300"></div>
+          <div id="import-bar" class="h-full bg-sky-500 w-0"></div>
         </div>
       </div>
 
       <div class="grid grid-cols-2 gap-3">
-        <button onclick="previewImport()" class="bg-slate-800 text-white py-4 rounded-xl font-bold uppercase text-xs hover:bg-slate-700">Testar 1º Bloco</button>
-        <button onclick="importClientsFromText()" class="bg-sky-500 text-white py-4 rounded-xl font-bold uppercase text-xs hover:bg-sky-400">Importar Tudo</button>
+        <button onclick="previewImport()" class="bg-slate-800 text-white py-4 rounded-xl font-bold uppercase text-xs">Testar</button>
+        <button onclick="importClientsFromText()" class="bg-sky-500 text-white py-4 rounded-xl font-bold uppercase text-xs">Importar Tudo</button>
       </div>
-      
-      <div class="mt-4">
-        <div class="text-[10px] font-black uppercase text-slate-400 mb-2">Resultado do teste:</div>
-        <pre id="import-preview" class="p-4 bg-slate-50 dark:bg-slate-800 rounded-xl text-[11px] overflow-auto max-h-40 border border-slate-100 dark:border-slate-700"></pre>
-      </div>
+      <pre id="import-preview" class="mt-4 p-3 bg-slate-50 dark:bg-slate-800 rounded-xl text-[10px] overflow-auto max-h-32 border dark:border-slate-700"></pre>
     </div>
   </div>
 `;
