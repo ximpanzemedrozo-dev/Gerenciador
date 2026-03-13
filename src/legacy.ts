@@ -41,12 +41,36 @@ const FULL_SERVERS_LIST = [
   "Havok Neon",
   "Blast Elite",
   "Blast Flash",
+  "Play Tv",
   "Primelux",
   "Starplay",
   "Vision",
   "Allbox",
   "Ryzeen",
   "Titan"
+];
+
+const SERVER_GROUPS: Array<{ title: string; servers: string[] }> = [
+  {
+    title: "Havok",
+    servers: ["Havok Radeon", "Havok Kyros", "Havok Andromeda", "Havok Neon"]
+  },
+  {
+    title: "Blast",
+    servers: ["Blast Elite", "Blast Flash", "Play Tv"]
+  },
+  {
+    title: "Premium",
+    servers: ["Primelux"]
+  },
+  {
+    title: "Casinhas",
+    servers: ["Starplay", "Vision"]
+  },
+  {
+    title: "Outros",
+    servers: ["Allbox", "Ryzeen", "Titan"]
+  }
 ];
 
 const CASINHA_COST: Record<string, number> = {
@@ -80,7 +104,6 @@ function ensureUiToggleButton() {
   const headerRow = document.querySelector("#app-content header .max-w-7xl");
   if (!headerRow) return;
 
-  // evita duplicar
   if (document.getElementById("ui-mode-btn")) return;
 
   const btn = document.createElement("button");
@@ -91,11 +114,8 @@ function ensureUiToggleButton() {
   btn.innerHTML = `<span id="ui-mode-label">Mobile</span>`;
 
   const rightSide = headerRow.querySelector(".flex.gap-3");
-  if (rightSide) {
-    rightSide.prepend(btn);
-  } else {
-    headerRow.appendChild(btn);
-  }
+  if (rightSide) rightSide.prepend(btn);
+  else headerRow.appendChild(btn);
 
   syncUiModeLabel();
 }
@@ -106,12 +126,21 @@ function syncUiModeLabel() {
   label.textContent = document.body.classList.contains("compact-ui") ? "Mobile" : "Desktop";
 }
 
+function getServerListForUi(): string[] {
+  const grouped = SERVER_GROUPS.flatMap((g) => g.servers);
+  const extraFromFirestore = servers
+    .map((s) => s.name)
+    .filter((name) => !grouped.includes(name) && !FULL_SERVERS_LIST.includes(name));
+
+  const extras = [...extraFromFirestore];
+  return [...grouped, ...extras];
+}
+
 // ---------- install ----------
 export function installLegacyApp() {
   document.getElementById("btn-login")?.addEventListener("click", () => window.handleAuth("login"));
   document.getElementById("btn-signup")?.addEventListener("click", () => window.handleAuth("signup"));
 
-  // default: compacto (melhor no celular)
   document.body.classList.add("compact-ui");
 
   firebaseApi.onAuthStateChanged(auth, async (user) => {
@@ -155,7 +184,7 @@ window.handleAuth = async (mode) => {
     if (mode === "login") await firebaseApi.signInWithEmailAndPassword(auth, email, password);
     else await firebaseApi.createUserWithEmailAndPassword(auth, email, password);
   } catch {
-    errorEl.innerText = "Falha no acesso. Verifique as suas credenciais.";
+    errorEl.innerText = 'Falha no acesso. Verifique as suas credenciais.';
     errorEl.classList.remove("hidden");
   }
 };
@@ -206,6 +235,7 @@ window.initialize12Servers = async (userId) => {
     "Havok Neon": 3.0,
     "Blast Elite": 3.5,
     "Blast Flash": 3.5,
+    "Play Tv": 3.5,
     Primelux: 4.0,
     Allbox: 3.0,
     Ryzeen: 3.5,
@@ -302,20 +332,18 @@ function calcRevendaTotals(serversMap: Record<string, RevendaServerRow>) {
   return { totalPaga, totalCasinhas, totalCustoServers, lucro };
 }
 
-function renderRevendaServerGridFromServers(existing?: Record<string, RevendaServerRow>) {
-  const grid = document.getElementById("rev-server-grid");
-  if (!grid) return;
+/** cria título de seção no grid */
+function sectionTitleHtml(title: string) {
+  return `
+    <div class="mt-6 mb-2">
+      <div class="text-[10px] font-black uppercase tracking-[0.3em] text-slate-400">${title}</div>
+    </div>
+  `;
+}
 
-  const list = servers.length ? servers.map((s) => s.name) : FULL_SERVERS_LIST;
-  grid.innerHTML = "";
-
-  for (const srvName of list) {
-    const ex = existing?.[srvName];
-
-    const row = document.createElement("div");
-    row.className = "rounded-2xl border border-slate-200 p-4 bg-white";
-
-    row.innerHTML = `
+function renderServerRowHtml(srvName: string, ex?: RevendaServerRow) {
+  return `
+    <div class="rounded-2xl border border-slate-200 p-4 bg-white">
       <div class="grid grid-cols-1 md:grid-cols-[1fr_220px] gap-4 items-center">
         <div class="min-w-0">
           <div class="font-black uppercase text-slate-700 truncate">${srvName}</div>
@@ -349,9 +377,38 @@ function renderRevendaServerGridFromServers(existing?: Record<string, RevendaSer
           </div>
         </div>
       </div>
-    `;
+    </div>
+  `;
+}
 
-    grid.appendChild(row);
+function renderRevendaServerGridFromServers(existing?: Record<string, RevendaServerRow>) {
+  const grid = document.getElementById("rev-server-grid");
+  if (!grid) return;
+
+  const firestoreNames = servers.map((s) => s.name);
+  const baseOrder = getServerListForUi();
+
+  const allowed = new Set([...FULL_SERVERS_LIST, ...firestoreNames]);
+
+  grid.innerHTML = "";
+
+  for (const g of SERVER_GROUPS) {
+    const items = g.servers.filter((name) => allowed.has(name));
+    if (items.length === 0) continue;
+
+    grid.insertAdjacentHTML("beforeend", sectionTitleHtml(g.title));
+    for (const srvName of items) {
+      grid.insertAdjacentHTML("beforeend", renderServerRowHtml(srvName, existing?.[srvName]));
+    }
+  }
+
+  const grouped = new Set(SERVER_GROUPS.flatMap((g) => g.servers));
+  const extras = baseOrder.filter((name) => allowed.has(name) && !grouped.has(name));
+  if (extras.length) {
+    grid.insertAdjacentHTML("beforeend", sectionTitleHtml("Extras"));
+    for (const srvName of extras) {
+      grid.insertAdjacentHTML("beforeend", renderServerRowHtml(srvName, existing?.[srvName]));
+    }
   }
 
   grid.querySelectorAll("input[data-srv]").forEach((el) => {
