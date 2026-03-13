@@ -299,10 +299,13 @@ function updateBulkUi() {
  * - Starplay: N • Vision: M (com os valores unitários)
  */
 function refreshTopProfitBar() {
-  const totalCasinhasEl = document.getElementById("top-total-casinhas");
-  const totalPlansEl = document.getElementById("top-total-plans");
-  const realProfitEl = document.getElementById("top-real-profit");
+  // ... calcula e atualiza textos ...
+  // depois disso:
+  layoutStickyTopBar();
 
+  requestAnimationFrame(() => layoutStickyTopBar());
+  setTimeout(() => layoutStickyTopBar(), 50);
+}
   // opcional (se existir no HTML)
   const metaEl = document.getElementById("top-casinhas-meta");
 
