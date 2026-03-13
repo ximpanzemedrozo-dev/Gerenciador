@@ -28,46 +28,62 @@ window.switchTheme = (theme: string) => {
   localStorage.setItem('gi-theme', theme);
 };
 
-// ---------- Motor de Importação Inteligente (Regras Solicitadas) ----------
-function parseSmartBlock(text: string): Partial<Client> {
+// ---------- Motor de Importação Refinado ----------
+function parseSmartBlock(text: string): Partial<Client> | null {
+  // Extrai o ID de 9 dígitos que deve estar no início do bloco
+  const idMatch = text.match(/^\s*(\d{9})/);
+  if (!idMatch) return null;
+
+  const result: Partial<Client> = {
+    idExt: idMatch[1],
+    cycle: 'mensal',
+    status: 'Ativo',
+    plano: 20
+  };
+
+  // 1. Vencimento: Pega a primeira data DD/MM/YYYY que encontrar no bloco
+  const dateMatch = text.match(/(\d{2}\/\d{2}\/\d{4})/);
+  if (dateMatch) result.venc = dateMatch[1];
+
+  // 2. Plano: Procura o valor após "Plano: R$"
+  const priceMatch = text.match(/Plano:\s*R\$\s*([\d,.]+)/i);
+  if (priceMatch) {
+    result.plano = parseFloat(priceMatch[1].replace('.', '').replace(',', '.'));
+  }
+
+  // 3. Nome/Referência:
+  // Procuramos a linha que contém o padrão "Nome - Detalhes"
+  // Geralmente é a linha que antecede a palavra "Plano"
   const lines = text.split('\n').map(l => l.trim()).filter(Boolean);
-  const result: Partial<Client> = { cycle: 'mensal', plano: 20, status: 'Ativo' };
+  const planoIndex = lines.findIndex(l => l.toLowerCase().includes('plano:'));
+  
+  if (planoIndex > 0) {
+    const nameLine = lines[planoIndex - 1];
+    // Se tiver hífen, pega apenas o que vem antes, conforme solicitado
+    result.nome = nameLine.includes(' - ') ? nameLine.split(' - ')[0].trim() : nameLine.trim();
+  }
 
-  // 1. ID do Usuário (Busca sequência de 9 dígitos)
-  const idMatch = text.match(/\b\d{9}\b/);
-  if (idMatch) result.idExt = idMatch[0];
-
-  // 2. Vencimento (Busca formato DD/MM/YYYY que NÃO seja a data de criação)
-  // Normalmente o vencimento aparece primeiro ou em destaque.
-  const dates = text.match(/\d{2}\/\d{2}\/\d{4}/g);
-  if (dates && dates.length > 0) result.venc = dates[0]; // Pega a primeira data (vencimento)
-
-  // 3. Valor do Plano
-  const priceMatch = text.match(/R\$\s*([\d,.]+)/);
-  if (priceMatch) result.plano = parseFloat(priceMatch[1].replace(',', '.'));
-
-  // 4. Nome/Referência e Status
-  lines.forEach(line => {
-    // Procura a linha que contém o nome (Irma da Kamila - 12/04/2026...)
-    if (line.includes(' - ') && line.includes('/') && !line.includes('Criado em')) {
-      result.nome = line.split(' - ')[0].trim();
-    }
-    if (line.toLowerCase() === 'ativo' || line.toLowerCase() === 'inativo') {
-      result.status = line;
-    }
-  });
-
-  // Fallback: Se não achou nome na linha do hífen, tenta a linha após o ID
-  if (!result.nome && lines.length > 5) result.nome = lines[lines.length - 3];
+  // 4. Status: Verifica se a palavra Ativo/Inativo está isolada em alguma linha
+  if (text.match(/\bAtivo\b/i)) result.status = 'Ativo';
+  if (text.match(/\bInativo\b/i)) result.status = 'Inativo';
 
   return result;
 }
 
-// ---------- Ações de Clientes e Bulk ----------
+// ---------- Ações em Massa (Bulk) ----------
 window.toggleBulkSelectClients = (force?: boolean) => {
   bulkMode = force !== undefined ? force : !bulkMode;
   selectedClientIds.clear();
-  document.getElementById('clients-bulkbar')?.classList.toggle('hidden', !bulkMode);
+  const bulkBar = document.getElementById('clients-bulkbar');
+  if (bulkBar) bulkBar.classList.toggle('hidden', !bulkMode);
+  renderClientsList();
+};
+
+window.bulkSelectAllFilteredClients = () => {
+  // Pega os IDs de todos os clientes que estão aparecendo no momento (filtrados)
+  const filtered = getFilteredClients();
+  filtered.forEach(c => selectedClientIds.add(c.id));
+  updateBulkCount();
   renderClientsList();
 };
 
@@ -78,43 +94,54 @@ function updateBulkCount() {
 
 window.bulkDeleteSelectedClients = async () => {
   if (!currentUserId || selectedClientIds.size === 0) return;
-  if (!confirm(`Deseja apagar ${selectedClientIds.size} clientes selecionados?`)) return;
+  if (!confirm(`Deseja apagar definitivamente ${selectedClientIds.size} clientes?`)) return;
 
   for (const id of selectedClientIds) {
-    await firebaseApi.deleteDoc(firebaseApi.doc(db, "artifacts", appId, "users", currentUserId, "clients", id));
+    try {
+      await firebaseApi.deleteDoc(firebaseApi.doc(db, "artifacts", appId, "users", currentUserId, "clients", id));
+    } catch (err) { console.error("Erro ao deletar:", id); }
   }
   window.toggleBulkSelectClients(false);
 };
 
-// ---------- Renderização ----------
+// ---------- Listagem e Filtros ----------
+function getFilteredClients() {
+  return clients; // Adicionar lógica de filtro aqui se necessário futuramente
+}
+
 function renderClientsList() {
   const cont = document.getElementById("clients-list");
   if (!cont) return;
 
   cont.innerHTML = "";
-  clients.forEach(c => {
+  const filtered = getFilteredClients();
+  
+  document.getElementById("clients-count")!.textContent = `${filtered.length}/${clients.length}`;
+
+  filtered.forEach(c => {
     const isSelected = selectedClientIds.has(c.id);
     const div = document.createElement("div");
-    div.className = `luxury-card p-5 cursor-pointer transition-all ${isSelected ? 'ring-2 ring-sky-500 bg-sky-50/50' : ''}`;
+    // Se estiver em modo bulk, o card inteiro vira um botão de seleção
+    div.className = `luxury-card p-5 cursor-pointer transition-all ${isSelected ? 'ring-2 ring-sky-500 bg-sky-50 dark:bg-sky-900/10' : ''}`;
     
     div.innerHTML = `
       <div class="flex items-start gap-3">
-        ${bulkMode ? `<input type="checkbox" class="mt-1" ${isSelected ? 'checked' : ''}>` : ''}
+        ${bulkMode ? `<div class="w-5 h-5 rounded-full border-2 flex items-center justify-center ${isSelected ? 'bg-sky-500 border-sky-500' : 'border-slate-300'}"><i data-lucide="check" class="w-3 h-3 text-white ${isSelected ? '' : 'hidden'}"></i></div>` : ''}
         <div class="flex-1 min-w-0">
-          <div class="font-black uppercase truncate text-slate-800">${c.nome || 'Sem Nome'}</div>
+          <div class="font-black uppercase truncate text-slate-800 dark:text-slate-100">${c.nome || 'Sem Nome'}</div>
           <div class="text-[10px] font-bold text-slate-400 mt-1 uppercase">ID: ${c.idExt || '-'} • ${c.status || 'Ativo'}</div>
           <div class="text-[11px] font-bold text-slate-500 mt-2">VENC: ${c.venc || '-'} • R$ ${c.plano?.toFixed(2)}</div>
         </div>
-        ${!bulkMode ? `<button onclick="window.deleteClient('${c.id}')" class="text-red-400 p-1"><i data-lucide="trash-2" class="w-4 h-4"></i></button>` : ''}
+        ${!bulkMode ? `<button onclick="window.deleteClient('${c.id}')" class="text-red-400 hover:text-red-600 p-1"><i data-lucide="trash-2" class="w-4 h-4"></i></button>` : ''}
       </div>
     `;
 
-    div.onclick = (e) => {
+    div.onclick = () => {
       if (bulkMode) {
         if (selectedClientIds.has(c.id)) selectedClientIds.delete(c.id);
         else selectedClientIds.add(c.id);
-        renderClientsList();
         updateBulkCount();
+        renderClientsList();
       }
     };
 
@@ -123,40 +150,56 @@ function renderClientsList() {
   createIcons({ icons });
 }
 
-// ---------- Importação ----------
+// ---------- Lógica de Importação ----------
 window.previewImport = () => {
   const text = (document.getElementById("import-text") as HTMLTextAreaElement).value;
   if (!text) return;
-  const blocks = text.split(/UsuárioDatas|Criado em|Conexões: \d+/i).filter(b => b.trim().length > 15);
-  const data = parseSmartBlock(blocks[0] || text);
-  document.getElementById("import-preview")!.textContent = JSON.stringify(data, null, 2);
+  
+  // No preview, pegamos o primeiro bloco que começa com 9 dígitos
+  const firstBlock = text.match(/\d{9}[\s\S]*?(?=\d{9}|$)/);
+  if (firstBlock) {
+    const data = parseSmartBlock(firstBlock[0]);
+    document.getElementById("import-preview")!.textContent = JSON.stringify(data, null, 2);
+  } else {
+    document.getElementById("import-preview")!.textContent = "Nenhum cliente válido detectado.";
+  }
 };
 
 window.importClientsFromText = async () => {
   if (!currentUserId) return;
   const text = (document.getElementById("import-text") as HTMLTextAreaElement).value;
-  const blocks = text.split(/UsuárioDatas|SituaçãoDetalhesAções/i).filter(b => b.trim().length > 20);
   
-  if (!blocks.length) return alert("Nenhum bloco de cliente detectado.");
+  // Regex para separar blocos que iniciam com um número de 9 dígitos
+  const blocks = text.match(/\d{9}[\s\S]*?(?=\d{9}|$)/g);
+  
+  if (!blocks || !blocks.length) return alert("Nenhum cliente detectado. Verifique se copiou o ID de 9 dígitos.");
   if (!confirm(`Importar ${blocks.length} clientes?`)) return;
 
-  document.getElementById('import-status-area')?.classList.remove('hidden');
+  const statusArea = document.getElementById('import-status-area');
   const bar = document.getElementById("import-bar");
+  const statusTxt = document.getElementById("import-status");
+  
+  statusArea?.classList.remove('hidden');
 
   for (let i = 0; i < blocks.length; i++) {
     const data = parseSmartBlock(blocks[i]);
-    await firebaseApi.addDoc(firebaseApi.collection(db, "artifacts", appId, "users", currentUserId, "clients"), {
-      ...data, createdAt: new Date().toISOString()
-    });
-    if (bar) bar.style.width = `${((i + 1) / blocks.length) * 100}%`;
+    if (data) {
+      await firebaseApi.addDoc(firebaseApi.collection(db, "artifacts", appId, "users", currentUserId, "clients"), {
+        ...data, createdAt: new Date().toISOString()
+      });
+    }
+    const pct = Math.round(((i + 1) / blocks.length) * 100);
+    if (bar) bar.style.width = `${pct}%`;
+    if (statusTxt) statusTxt.textContent = `Importando: ${i + 1}/${blocks.length}`;
   }
 
-  alert("Importação concluída com sucesso!");
+  alert("Importação finalizada com sucesso!");
   window.toggleModal("import-modal");
   (document.getElementById("import-text") as HTMLTextAreaElement).value = "";
+  statusArea?.classList.add('hidden');
 };
 
-// ---------- Inicialização ----------
+// ---------- Inicialização e Sync ----------
 export function installLegacyApp() {
   const savedTheme = localStorage.getItem('gi-theme') || 'light';
   window.switchTheme(savedTheme);
@@ -180,23 +223,20 @@ window.startListening = (uid) => {
 };
 
 function refreshTopProfitBar() {
-  const mensalistas = clients.filter(c => c.cycle === 'mensal');
+  const mensalistas = clients.filter(c => (c.cycle || 'mensal') === 'mensal');
   const total = mensalistas.reduce((acc, c) => acc + (c.plano || 0), 0);
-  const custos = mensalistas.length * 2.5; // Exemplo de custo fixo
+  const custos = mensalistas.length * 2.5; 
   
   document.getElementById("top-total-plans")!.textContent = "R$ " + total.toFixed(2);
   document.getElementById("top-total-casinhas")!.textContent = "R$ " + custos.toFixed(2);
   document.getElementById("top-real-profit")!.textContent = "R$ " + (total - custos).toFixed(2);
-  document.getElementById("clients-count")!.textContent = `${clients.length}/${clients.length}`;
 }
 
-// Funções base (Auth/Modal)
+// Globais Auxiliares
 window.handleAuth = async (m) => {
   const e = (document.getElementById("auth-email") as HTMLInputElement).value;
   const p = (document.getElementById("auth-password") as HTMLInputElement).value;
-  try {
-    if (m === 'login') await firebaseApi.signInWithEmailAndPassword(auth, e, p);
-  } catch (err) { alert("Erro de login."); }
+  try { if (m === 'login') await firebaseApi.signInWithEmailAndPassword(auth, e, p); } catch { alert("Erro de login."); }
 };
 window.logout = () => firebaseApi.signOut(auth);
 window.switchView = (v) => {
@@ -208,6 +248,7 @@ window.switchView = (v) => {
 };
 window.toggleModal = (id) => document.getElementById(id)?.classList.toggle('active');
 window.openImportClients = () => window.toggleModal('import-modal');
+window.openAddClient = () => { /* Lógica de abrir form vazio */ };
 window.deleteClient = async (id) => {
-  if (currentUserId && confirm("Apagar cliente?")) await firebaseApi.deleteDoc(firebaseApi.doc(db, "artifacts", appId, "users", currentUserId, "clients", id));
+  if (currentUserId && confirm("Deseja apagar este cliente?")) await firebaseApi.deleteDoc(firebaseApi.doc(db, "artifacts", appId, "users", currentUserId, "clients", id));
 };
