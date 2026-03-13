@@ -1,5 +1,86 @@
 @import "tailwindcss";
 
+/* ===== Base visual ===== */
+:root {
+  --bg: #f8fafc;
+  --card: #ffffff;
+  --text: #0f172a;
+  --muted: #64748b;
+  --border: #e2e8f0;
+  --accent: #0ea5e9;
+  --accent-weak: rgba(14, 165, 233, 0.12);
+}
+
+html,
+body {
+  height: 100%;
+}
+
+body {
+  margin: 0;
+  font-family: system-ui, -apple-system, Segoe UI, Roboto, Arial, sans-serif;
+  background: var(--bg);
+  color: var(--text);
+}
+
+/* ===== Inputs (grande: login / campos principais) ===== */
+.input-box {
+  width: 100%;
+  background: #0f172a;
+  color: #fff;
+  border: 2px solid rgba(255, 255, 255, 0.06);
+  border-radius: 1.25rem;
+  padding: 1.05rem 1.25rem;
+  font-weight: 700;
+  outline: none;
+}
+
+.input-box::placeholder {
+  color: rgba(255, 255, 255, 0.55);
+}
+
+.input-box:focus {
+  border-color: rgba(14, 165, 233, 0.65);
+  box-shadow: 0 0 0 6px rgba(14, 165, 233, 0.12);
+}
+
+/* ===== Inputs compactos (grid/edição rápida no mobile) ===== */
+.mini-input {
+  width: 100%;
+  background: #0f172a;
+  color: #fff;
+  border: 2px solid rgba(255, 255, 255, 0.06);
+  border-radius: 0.9rem;
+  padding: 0.65rem 0.75rem;
+  font-weight: 800;
+  outline: none;
+  text-align: center;
+}
+
+.mini-input:focus {
+  border-color: rgba(14, 165, 233, 0.65);
+  box-shadow: 0 0 0 5px rgba(14, 165, 233, 0.12);
+}
+
+/* Remove setas no number (fica melhor no mobile) */
+.mini-input[type="number"]::-webkit-outer-spin-button,
+.mini-input[type="number"]::-webkit-inner-spin-button {
+  -webkit-appearance: none;
+  margin: 0;
+}
+.mini-input[type="number"] {
+  appearance: textfield;
+}
+
+/* ===== Cards ===== */
+.luxury-card {
+  background: var(--card);
+  border: 1px solid var(--border);
+  border-radius: 1.25rem;
+  padding: 1.25rem;
+}
+
+/* ===== Modal (scroll interno) ===== */
 .modal-overlay {
   display: none;
   position: fixed;
@@ -8,12 +89,10 @@
   backdrop-filter: blur(10px);
   z-index: 9999;
 
-  /* centraliza o modal */
   align-items: center;
   justify-content: center;
 
-  /* scroll correto */
-  padding: 1rem;
+  padding: 0.75rem;
   overflow: auto;
 }
 
@@ -23,6 +102,86 @@
 
 .modal-overlay > div {
   width: min(960px, 100%);
-  max-height: calc(100vh - 2rem);
+  max-height: calc(100vh - 1.5rem);
   overflow: auto;
+}
+
+/* ===== Nav ===== */
+.nav-btn {
+  transition: 0.2s ease;
+  color: var(--muted);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 4px;
+  padding: 10px 12px;
+  border-radius: 1rem;
+  font-weight: 900;
+  text-transform: uppercase;
+}
+
+.nav-btn span {
+  font-size: 9px;
+  font-weight: 900;
+  letter-spacing: 0.08em;
+}
+
+.nav-btn.active {
+  color: var(--accent);
+  background: var(--accent-weak);
+}
+
+/* ===== Botão do modo (compacto/desktop) ===== */
+.ui-toggle-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  padding: 0.75rem 0.9rem;
+  border-radius: 1rem;
+  border: 1px solid var(--border);
+  background: #fff;
+  color: #334155;
+  font-weight: 900;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  font-size: 10px;
+}
+
+/* ===== Modo compacto (mobile one-hand) ===== */
+body.compact-ui .modal-overlay {
+  padding: 0.5rem;
+}
+
+body.compact-ui .modal-overlay > div {
+  border-radius: 1.25rem !important;
+  padding: 1rem !important;
+}
+
+body.compact-ui .nav-btn {
+  padding: 8px 10px;
+}
+
+body.compact-ui .nav-btn span {
+  font-size: 8px;
+}
+
+/* ===== Ajustes pequenos ===== */
+button {
+  cursor: pointer;
+}
+
+.view-section {
+  animation: fadeIn 120ms ease-out;
+}
+
+@keyframes fadeIn {
+  from {
+    opacity: 0.6;
+    transform: translateY(2px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
 }
