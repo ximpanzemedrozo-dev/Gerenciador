@@ -190,4 +190,3 @@ export const appHtml = `
     </div>
   </div>
 `;
-`;
