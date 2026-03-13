@@ -45,7 +45,7 @@ export const appHtml = `
             <i id="theme-icon" data-lucide="sun"></i>
           </button>
 
-          <button onclick="sigmaDB.signOut(sigmaDB.auth)" class="p-3 rounded-2xl bg-red-50 text-red-500 border border-red-100" title="Sair">
+          <button onclick="logout()" class="p-3 rounded-2xl bg-red-50 text-red-500 border border-red-100" title="Sair">
             <i data-lucide="log-out"></i>
           </button>
         </div>
@@ -53,7 +53,7 @@ export const appHtml = `
     </header>
 
     <main class="max-w-7xl mx-auto px-4 pt-5 pb-32">
-      <!-- CLIENTES (FUNCIONAL) -->
+      <!-- CLIENTES -->
       <section id="view-clients" class="view-section">
         <div class="flex flex-col gap-3 md:flex-row md:items-center md:justify-between mb-4">
           <div>
@@ -71,14 +71,49 @@ export const appHtml = `
           </div>
         </div>
 
-        <div class="rounded-2xl border border-slate-200 bg-white p-4 mb-4">
+        <!-- filtros -->
+        <div class="rounded-2xl border border-slate-200 bg-white p-4 mb-4 space-y-3">
+          <div class="grid grid-cols-2 gap-3">
+            <div>
+              <label class="text-[10px] font-black uppercase text-slate-400 mb-2 block ml-1">Servidor</label>
+              <select id="clients-filter-server" class="filter-select">
+                <option value="">Todos</option>
+                <option value="Starplay">Starplay</option>
+                <option value="Vision">Vision</option>
+                <option value="Primelux">Primelux</option>
+                <option value="Play Tv">Play Tv</option>
+                <option value="Blast Elite">Blast Elite</option>
+                <option value="Blast Flash">Blast Flash</option>
+                <option value="Havok Radeon">Havok Radeon</option>
+                <option value="Havok Kyros">Havok Kyros</option>
+                <option value="Havok Andromeda">Havok Andromeda</option>
+                <option value="Havok Neon">Havok Neon</option>
+                <option value="Allbox">Allbox</option>
+                <option value="Ryzeen">Ryzeen</option>
+                <option value="Titan">Titan</option>
+              </select>
+            </div>
+
+            <div>
+              <label class="text-[10px] font-black uppercase text-slate-400 mb-2 block ml-1">Ciclo</label>
+              <select id="clients-filter-cycle" class="filter-select">
+                <option value="">Todos</option>
+                <option value="mensal">Mensal</option>
+                <option value="bimestral">Bimestral</option>
+                <option value="trimestral">Trimestral</option>
+                <option value="semestral">Semestral</option>
+                <option value="anual">Anual</option>
+              </select>
+            </div>
+          </div>
+
           <input id="clients-search" class="input-box" placeholder="Buscar por nome, email, id, painel..." />
         </div>
 
         <div id="clients-list" class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4"></div>
       </section>
 
-      <!-- CASINHAS (placeholder por enquanto) -->
+      <!-- CASINHAS -->
       <section id="view-casinhas" class="view-section hidden">
         <div class="rounded-2xl border border-slate-200 bg-white p-6">
           <h2 class="text-xl font-black">Casinhas</h2>
@@ -86,7 +121,7 @@ export const appHtml = `
         </div>
       </section>
 
-      <!-- REVENDAS (FUNCIONAL) -->
+      <!-- REVENDAS -->
       <section id="view-revendas" class="view-section hidden">
         <div class="flex justify-between items-center mb-4">
           <div>
@@ -102,7 +137,7 @@ export const appHtml = `
         <div id="revendas-list" class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4"></div>
       </section>
 
-      <!-- SERVERS (placeholder por enquanto) -->
+      <!-- SERVERS -->
       <section id="view-servers" class="view-section hidden">
         <div class="rounded-2xl border border-slate-200 bg-white p-6">
           <h2 class="text-xl font-black">Painéis</h2>
@@ -110,11 +145,42 @@ export const appHtml = `
         </div>
       </section>
 
-      <!-- FINANCE (placeholder por enquanto) -->
+      <!-- FINANCE (AGORA COM DASH) -->
       <section id="view-finance" class="view-section hidden">
-        <div class="rounded-2xl border border-slate-200 bg-white p-6">
-          <h2 class="text-xl font-black">Ganhos</h2>
-          <p class="text-sm text-slate-500 mt-2">Próximo passo: dashboard de lucro por mês.</p>
+        <div class="flex items-end justify-between mb-4">
+          <div>
+            <h2 class="text-2xl font-black italic uppercase tracking-tighter">Ganhos</h2>
+            <p class="text-xs font-bold text-slate-400 uppercase tracking-widest mt-1">Resumo por ciclo e painel</p>
+          </div>
+          <button onclick="refreshFinance()" class="bg-slate-900 text-white px-4 py-3 rounded-2xl font-black text-xs uppercase">
+            Atualizar
+          </button>
+        </div>
+
+        <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
+          <div class="rounded-2xl border border-slate-200 bg-white p-5">
+            <div class="text-[10px] font-black uppercase tracking-[0.3em] text-slate-400">Clientes (filtrados)</div>
+            <div id="fin-total-clients" class="text-3xl font-black text-slate-900 mt-2">0</div>
+          </div>
+
+          <div class="rounded-2xl border border-slate-200 bg-white p-5">
+            <div class="text-[10px] font-black uppercase tracking-[0.3em] text-slate-400">Total planos (soma)</div>
+            <div id="fin-total-plans" class="text-3xl font-black text-emerald-600 mt-2">R$ 0,00</div>
+          </div>
+
+          <div class="rounded-2xl border border-slate-200 bg-white p-5">
+            <div class="text-[10px] font-black uppercase tracking-[0.3em] text-slate-400">Vencendo (7 dias)</div>
+            <div id="fin-due-soon" class="text-3xl font-black text-rose-500 mt-2">0</div>
+          </div>
+        </div>
+
+        <div class="mt-4 rounded-2xl border border-slate-200 bg-white p-5">
+          <div class="flex items-center justify-between gap-3">
+            <div class="text-sm font-black uppercase tracking-widest text-slate-400">Resumo</div>
+            <div class="text-[10px] font-black uppercase tracking-[0.3em] text-slate-400">por ciclo / painel</div>
+          </div>
+
+          <div id="fin-breakdown" class="mt-4 space-y-3"></div>
         </div>
       </section>
     </main>
@@ -164,6 +230,17 @@ export const appHtml = `
         </div>
 
         <div>
+          <label class="text-[10px] font-black uppercase text-slate-400 mb-2 block ml-1">Ciclo</label>
+          <select id="client-cycle" class="filter-select">
+            <option value="mensal">Mensal</option>
+            <option value="bimestral">Bimestral</option>
+            <option value="trimestral">Trimestral</option>
+            <option value="semestral">Semestral</option>
+            <option value="anual">Anual</option>
+          </select>
+        </div>
+
+        <div>
           <label class="text-[10px] font-black uppercase text-slate-400 mb-2 block ml-1">Email/Login</label>
           <input id="client-email" class="input-box" placeholder="ex: dalvastream@gmail.com" />
         </div>
@@ -206,23 +283,44 @@ export const appHtml = `
     </div>
   </div>
 
-  <!-- MODAL: IMPORTAR CLIENTES (multi-blocos + progresso) -->
+  <!-- MODAL: IMPORTAR CLIENTES (SÓ SERVIDOR) -->
   <div id="import-modal" class="modal-overlay" onclick="toggleModal('import-modal')">
     <div class="bg-white dark:bg-slate-900 w-full max-w-3xl rounded-[2.5rem] p-6 shadow-3xl max-h-[90vh] overflow-y-auto" onclick="event.stopPropagation()">
       <div class="flex items-start justify-between gap-4">
         <div>
           <h2 class="text-2xl font-black italic uppercase text-sky-600 tracking-tighter">Importar Clientes</h2>
-          <p class="text-xs font-bold text-slate-400 uppercase tracking-widest mt-1">Cole vários blocos e importe</p>
+          <p class="text-xs font-bold text-slate-400 uppercase tracking-widest mt-1">Escolha servidor (ou auto)</p>
         </div>
         <button onclick="toggleModal('import-modal')" class="text-slate-400 font-black">Fechar</button>
       </div>
 
-      <div class="mt-5">
+      <div class="grid grid-cols-1 gap-3 mt-5">
+        <div>
+          <label class="text-[10px] font-black uppercase text-slate-400 mb-2 block ml-1">Servidor (forçar)</label>
+          <select id="import-server" class="filter-select">
+            <option value="">Auto (pelo texto)</option>
+            <option value="Starplay">Starplay</option>
+            <option value="Vision">Vision</option>
+            <option value="Primelux">Primelux</option>
+            <option value="Play Tv">Play Tv</option>
+            <option value="Blast Elite">Blast Elite</option>
+            <option value="Blast Flash">Blast Flash</option>
+            <option value="Havok Radeon">Havok Radeon</option>
+            <option value="Havok Kyros">Havok Kyros</option>
+            <option value="Havok Andromeda">Havok Andromeda</option>
+            <option value="Havok Neon">Havok Neon</option>
+            <option value="Allbox">Allbox</option>
+            <option value="Ryzeen">Ryzeen</option>
+            <option value="Titan">Titan</option>
+          </select>
+        </div>
+      </div>
+
+      <div class="mt-4">
         <label class="text-[10px] font-black uppercase text-slate-400 mb-2 block ml-1">Texto do painel (1 ou vários clientes)</label>
         <textarea id="import-text" class="w-full rounded-2xl border border-slate-200 p-4 font-mono text-xs min-h-[240px]"></textarea>
       </div>
 
-      <!-- Progresso -->
       <div class="mt-4 rounded-2xl border border-slate-200 bg-slate-50 p-4">
         <div class="flex items-center justify-between gap-3">
           <div class="text-[10px] font-black uppercase tracking-[0.3em] text-slate-400">Progresso</div>
