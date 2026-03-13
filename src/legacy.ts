@@ -20,14 +20,11 @@ declare global {
     toggleModal: (id: string) => void;
     toggleDarkMode: () => void;
 
-    // core
     initialize12Servers: (userId: string) => Promise<void>;
     startListening: (userId: string) => void;
 
-    // nav
     switchView: (v: string) => void;
 
-    // revendas
     openAddRevenda: () => void;
     openEditRevenda: (id: string) => void;
     saveRevenda: () => Promise<void>;
@@ -71,7 +68,6 @@ function parseNum(raw: string): number {
 }
 
 function getServerCostByName(name: string): number {
-  // se existir no Firestore servers, usa custo; senão usa casinha defaults quando applicable, senão 0
   const s = servers.find((x) => x.name === name);
   if (s) return Number(s.cost) || 0;
   if (CASINHA_COST[name] != null) return CASINHA_COST[name];
@@ -96,7 +92,6 @@ export function installLegacyApp() {
       await window.initialize12Servers(user.uid);
       window.startListening(user.uid);
 
-      // abre em revendas por enquanto (pois é a parte pronta)
       window.switchView("revendas");
     } else {
       currentUserId = null;
@@ -187,21 +182,18 @@ window.initialize12Servers = async (userId) => {
 };
 
 window.startListening = (userId) => {
-  // servers listener
   firebaseApi.onSnapshot(firebaseApi.collection(db, "artifacts", appId, "users", userId, "servers"), (snap) => {
     servers = snap.docs.map((d) => {
       const data = d.data() as any;
       return { id: d.id, name: data.name, cost: Number(data.cost) || 0 };
     });
 
-    // se o modal de revenda estiver aberto, atualiza o grid
     if (document.getElementById("revenda-modal")?.classList.contains("active")) {
       renderRevendaServerGridFromServers();
       updateRevendaTotalsFromInputs();
     }
   });
 
-  // revendas listener
   firebaseApi.onSnapshot(firebaseApi.collection(db, "artifacts", appId, "users", userId, "revendas"), (snap) => {
     revendas = snap.docs.map((d) => ({ id: d.id, ...(d.data() as any) })) as Revenda[];
     renderRevendasList();
@@ -260,22 +252,19 @@ function calcRevendaTotals(serversMap: Record<string, RevendaServerRow>) {
 
     totalPaga += count * price;
 
-    // casinhas custo fixo para Vision/Starplay
-    if (CASINHA_COST[srvName] != null) {
-      totalCasinhas += count * CASINHA_COST[srvName];
-    }
-
-    // custo do painel (se cadastrado em servers)
+    if (CASINHA_COST[srvName] != null) totalCasinhas += count * CASINHA_COST[srvName];
     totalCustoServers += count * getServerCostByName(srvName);
   }
 
-  // lucro “real”: receita - custo servers
-  // (isso já inclui Vision/Starplay, porque o custo desses servidores default = 2.0/2.5 ao criar)
   const lucro = totalPaga - totalCustoServers;
-
   return { totalPaga, totalCasinhas, totalCustoServers, lucro };
 }
 
+/**
+ * FIX: layout sem sobreposição
+ * - usa grid: nome ocupa o resto, inputs ficam numa coluna fixa (2 inputs)
+ * - em telas pequenas vira 1 coluna (nome em cima, inputs embaixo)
+ */
 function renderRevendaServerGridFromServers(existing?: Record<string, RevendaServerRow>) {
   const grid = document.getElementById("rev-server-grid");
   if (!grid) return;
@@ -285,40 +274,48 @@ function renderRevendaServerGridFromServers(existing?: Record<string, RevendaSer
 
   for (const srvName of list) {
     const ex = existing?.[srvName];
+
     const row = document.createElement("div");
-    row.className = "flex items-center gap-3 rounded-2xl border border-slate-200 p-4";
+    row.className = "rounded-2xl border border-slate-200 p-4 bg-white";
 
     row.innerHTML = `
-      <div class="flex-1">
-        <div class="font-black uppercase text-slate-700">${srvName}</div>
-        <div class="text-[11px] font-bold text-slate-400 uppercase tracking-widest mt-1">
-          Custo unidade: ${money(getServerCostByName(srvName))}
+      <div class="grid grid-cols-1 md:grid-cols-[1fr_240px] gap-4 items-center">
+        <div class="min-w-0">
+          <div class="font-black uppercase text-slate-700 truncate">${srvName}</div>
+          <div class="text-[11px] font-bold text-slate-400 uppercase tracking-widest mt-1">
+            Custo unidade: ${money(getServerCostByName(srvName))}
+          </div>
         </div>
-      </div>
 
-      <div class="w-24">
-        <label class="text-[10px] font-black uppercase text-slate-400 block mb-1">QTD</label>
-        <input class="input-box !p-3 !rounded-xl !bg-slate-900 !text-white text-center"
-               inputmode="numeric"
-               data-srv="${srvName}"
-               data-type="count"
-               value="${ex?.count ?? 0}">
-      </div>
+        <div class="grid grid-cols-2 gap-3">
+          <div>
+            <label class="text-[10px] font-black uppercase text-slate-400 block mb-1">QTD</label>
+            <input
+              class="input-box !p-3 !rounded-xl text-center"
+              inputmode="numeric"
+              data-srv="${srvName}"
+              data-type="count"
+              value="${ex?.count ?? 0}"
+            />
+          </div>
 
-      <div class="w-28">
-        <label class="text-[10px] font-black uppercase text-slate-400 block mb-1">R$ / cliente</label>
-        <input class="input-box !p-3 !rounded-xl !bg-slate-900 !text-white text-center"
-               inputmode="decimal"
-               data-srv="${srvName}"
-               data-type="price"
-               value="${ex?.price ?? 0}">
+          <div>
+            <label class="text-[10px] font-black uppercase text-slate-400 block mb-1">R$ / cliente</label>
+            <input
+              class="input-box !p-3 !rounded-xl text-center"
+              inputmode="decimal"
+              data-srv="${srvName}"
+              data-type="price"
+              value="${ex?.price ?? 0}"
+            />
+          </div>
+        </div>
       </div>
     `;
 
     grid.appendChild(row);
   }
 
-  // listeners de cálculo em tempo real
   grid.querySelectorAll("input[data-srv]").forEach((el) => {
     el.addEventListener("input", () => updateRevendaTotalsFromInputs());
   });
@@ -326,6 +323,7 @@ function renderRevendaServerGridFromServers(existing?: Record<string, RevendaSer
 
 function readRevendaServersFromInputs(): Record<string, RevendaServerRow> {
   const out: Record<string, RevendaServerRow> = {};
+
   document.querySelectorAll<HTMLInputElement>("#rev-server-grid input[data-srv]").forEach((input) => {
     const srv = input.getAttribute("data-srv") || "";
     const type = input.getAttribute("data-type") as "count" | "price";
@@ -336,10 +334,10 @@ function readRevendaServersFromInputs(): Record<string, RevendaServerRow> {
     if (type === "price") out[srv].price = Math.max(0, parseNum(input.value));
   });
 
-  // remove linhas 0/0 pra não poluir o Firestore
   for (const [k, v] of Object.entries(out)) {
     if ((v.count || 0) <= 0 && (v.price || 0) <= 0) delete out[k];
   }
+
   return out;
 }
 
@@ -347,7 +345,6 @@ function updateRevendaTotalsFromInputs() {
   const totalPagaEl = document.getElementById("rev-total-paga");
   const totalCasinhasEl = document.getElementById("rev-total-custo-casinhas");
   const lucroEl = document.getElementById("rev-total-lucro");
-
   if (!totalPagaEl || !totalCasinhasEl || !lucroEl) return;
 
   const map = readRevendaServersFromInputs();
@@ -360,9 +357,8 @@ function updateRevendaTotalsFromInputs() {
 
 // ---------- Revendas actions ----------
 window.openAddRevenda = () => {
-  (document.getElementById("revenda-modal-title") as HTMLElement | null)?.replaceChildren(
-    document.createTextNode("Nova Revenda")
-  );
+  const title = document.getElementById("revenda-modal-title");
+  if (title) title.textContent = "Nova Revenda";
 
   (document.getElementById("rev-edit-id") as HTMLInputElement | null)!.value = "";
   (document.getElementById("rev-nome") as HTMLInputElement | null)!.value = "";
@@ -379,9 +375,8 @@ window.openEditRevenda = (id) => {
   const r = revendas.find((x) => x.id === id);
   if (!r) return;
 
-  (document.getElementById("revenda-modal-title") as HTMLElement | null)?.replaceChildren(
-    document.createTextNode("Editar Revenda")
-  );
+  const title = document.getElementById("revenda-modal-title");
+  if (title) title.textContent = "Editar Revenda";
 
   (document.getElementById("rev-edit-id") as HTMLInputElement | null)!.value = r.id;
   (document.getElementById("rev-nome") as HTMLInputElement | null)!.value = r.nome ?? "";
@@ -399,7 +394,10 @@ window.saveRevenda = async () => {
 
   const id = (document.getElementById("rev-edit-id") as HTMLInputElement | null)?.value || "";
   const nome = (document.getElementById("rev-nome") as HTMLInputElement | null)?.value?.trim() || "";
-  const divisoes = Math.max(1, Math.floor(parseNum((document.getElementById("rev-divisoes") as HTMLInputElement | null)?.value || "1")));
+  const divisoes = Math.max(
+    1,
+    Math.floor(parseNum((document.getElementById("rev-divisoes") as HTMLInputElement | null)?.value || "1"))
+  );
   const payDate1 = (document.getElementById("rev-pay-date-1") as HTMLInputElement | null)?.value || "";
   const payDate2 = (document.getElementById("rev-pay-date-2") as HTMLInputElement | null)?.value || "";
 
@@ -434,6 +432,5 @@ window.saveRevenda = async () => {
 window.deleteRevenda = async (id) => {
   if (!currentUserId) return;
   if (!confirm("Deseja apagar esta revenda?")) return;
-
   await firebaseApi.deleteDoc(firebaseApi.doc(db, "artifacts", appId, "users", currentUserId, "revendas", id));
 };
