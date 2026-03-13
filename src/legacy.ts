@@ -51,6 +51,9 @@ declare global {
     // ui mode
     toggleUiMode: () => void;
 
+    // logout (FIX: sem sigmaDB)
+    logout: () => Promise<void>;
+
     // clients
     openAddClient: () => void;
     openEditClient: (id: string) => void;
@@ -262,6 +265,11 @@ window.toggleDarkMode = () => {
 window.toggleUiMode = () => {
   document.body.classList.toggle("compact-ui");
   syncUiModeLabel();
+};
+
+window.logout = async () => {
+  // FIX: logout oficial do Firebase Auth (sem sigmaDB)
+  await firebaseApi.signOut(auth);
 };
 
 window.switchView = (v) => {
@@ -483,7 +491,6 @@ function parseImportBlock(text: string): Partial<Client> {
   const emailLine = lines.find((l) => /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(l));
   if (emailLine) out.email = emailLine;
 
-  // vencimento: DD/MM/YYYY, HH:MM:SS
   const vencLine = lines.find((l) => /^\d{2}\/\d{2}\/\d{4},\s*\d{2}:\d{2}:\d{2}$/.test(l));
   if (vencLine) out.venc = toIsoDateFromPtDate(vencLine);
 
@@ -508,7 +515,6 @@ function parseImportBlock(text: string): Partial<Client> {
 function splitImportBlocks(text: string): string[] {
   const rawLines = (text || "").split("\n");
 
-  // divide sempre que encontrar uma linha que seja um ID numérico (>=5 dígitos) e que não esteja no meio de um bloco
   const blocks: string[] = [];
   let buf: string[] = [];
 
@@ -521,9 +527,7 @@ function splitImportBlocks(text: string): string[] {
   for (const line of rawLines) {
     const trimmed = line.trim();
 
-    // novo bloco (quando aparece um id)
     if (/^[0-9]{5,}$/.test(trimmed)) {
-      // se já estávamos num bloco e já tem conteúdo, fecha e inicia novo
       if (buf.length > 0) flush();
     }
     buf.push(line);
@@ -612,7 +616,6 @@ window.importClientsFromText = async () => {
     const painel = normalizeServerName(parsed.painel || "");
     const venc = parsed.venc || "";
 
-    // mínimos obrigatórios pra criar
     if (!nome || !painel || !venc) {
       fail++;
       setImportProgress(i + 1, blocks.length, `Falhou bloco ${i + 1}/${blocks.length}: faltou nome/painel/vencimento.`);
@@ -624,7 +627,7 @@ window.importClientsFromText = async () => {
         nome,
         painel,
         email: parsed.email || "",
-        senha: "", // você pediu vazia
+        senha: "",
         venc,
         plano: typeof parsed.plano === "number" ? parsed.plano : 0,
         conexoes: parsed.conexoes ?? 1,
@@ -647,7 +650,6 @@ window.importClientsFromText = async () => {
       setImportProgress(i + 1, blocks.length, `Erro no bloco ${i + 1}: ${String(e)}`);
     }
 
-    // dá chance de renderizar a barra no mobile
     await new Promise((r) => setTimeout(r, 30));
   }
 
@@ -655,7 +657,7 @@ window.importClientsFromText = async () => {
   alert(`Importação concluída.\nImportados: ${ok}\nFalhas: ${fail}`);
 };
 
-// ---------- Revendas (igual ao que você já tinha) ----------
+// ---------- Revendas ----------
 function renderRevendasList() {
   const cont = document.getElementById("revendas-list");
   if (!cont) return;
