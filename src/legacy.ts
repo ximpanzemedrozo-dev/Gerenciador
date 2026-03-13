@@ -119,6 +119,42 @@ function toIsoDateFromPtDate(d: string): string {
   return `${yyyy}-${mm}-${dd}`;
 }
 
+/**
+ * aceita variações:
+ * - DD/MM/YYYY, HH:MM:SS
+ * - DD/MM/YYYY, HH:MM
+ * - DD/MM/YYYY HH:MM:SS
+ * - DD/MM/YYYY HH:MM
+ * - DD/MM/YYYY
+ */
+function tryParsePtDateLineToIso(line: string): string {
+  const s = (line || "").trim();
+  if (!s) return "";
+
+  // DD/MM/YYYY, HH:MM(:SS)?
+  let m = s.match(/(\d{2})\/(\d{2})\/(\d{4}),\s*(\d{2}):(\d{2})(?::(\d{2}))?/);
+  if (m) {
+    const [, dd, mm, yyyy] = m;
+    return `${yyyy}-${mm}-${dd}`;
+  }
+
+  // DD/MM/YYYY HH:MM(:SS)?
+  m = s.match(/(\d{2})\/(\d{2})\/(\d{4})\s+(\d{2}):(\d{2})(?::(\d{2}))?/);
+  if (m) {
+    const [, dd, mm, yyyy] = m;
+    return `${yyyy}-${mm}-${dd}`;
+  }
+
+  // DD/MM/YYYY (puro)
+  m = s.match(/(\d{2})\/(\d{2})\/(\d{4})/);
+  if (m) {
+    const [, dd, mm, yyyy] = m;
+    return `${yyyy}-${mm}-${dd}`;
+  }
+
+  return "";
+}
+
 function normalizeServerName(raw: string): string {
   const s = (raw || "").toUpperCase();
 
@@ -204,6 +240,28 @@ function daysBetweenIso(a: string, b: string): number {
   const da = new Date(a + "T00:00:00");
   const db = new Date(b + "T00:00:00");
   return Math.floor((db.getTime() - da.getTime()) / (1000 * 60 * 60 * 24));
+}
+
+/** linhas que NÃO são nome (pra fallback do import) */
+function isNoiseNameLine(line: string): boolean {
+  const t = (line || "").trim();
+  if (!t) return true;
+
+  if (/^IPTV$/i.test(t)) return true;
+  if (/^(Ativo|Inativo)$/i.test(t)) return true;
+  if (/^Criado em/i.test(t)) return true;
+  if (/^Plano:\s*R\$\s*/i.test(t)) return true;
+  if (/^Conex(ões|oes):/i.test(t)) return true;
+
+  if (/^[0-9]{5,}$/.test(t)) return true; // id numérico
+  if (/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(t)) return true; // email
+  if (tryParsePtDateLineToIso(t)) return true; // datas
+
+  if (/STAR\s*PLAY|STARPLAY|VISION|HAVOK|BLAST|PRIME|PRIMELUX|PLAY\s*TV|ALLBOX|RYZEEN|TITAN/i.test(t)) return true;
+
+  if (t.length <= 2) return true;
+
+  return false;
 }
 
 // ---------- install ----------
@@ -386,11 +444,18 @@ function getFilteredClients(): Client[] {
   });
 }
 
+function updateClientsCount(visible: number, total: number) {
+  const el = document.getElementById("clients-count");
+  if (!el) return;
+  el.textContent = `${visible}/${total}`;
+}
+
 function renderClientsList() {
   const cont = document.getElementById("clients-list");
   if (!cont) return;
 
   const filtered = getFilteredClients();
+  updateClientsCount(filtered.length, clients.length);
 
   if (filtered.length === 0) {
     cont.innerHTML = `<div class="rounded-2xl border border-slate-200 bg-white p-6 text-slate-500">Nenhum cliente encontrado.</div>`;
@@ -530,19 +595,33 @@ function parseImportBlock(text: string): Partial<Client> {
   const idLine = lines.find((l) => /^[0-9]{5,}$/.test(l));
   if (idLine) out.idExt = idLine;
 
-  const painelLine = lines.find((l) => /STAR\s*PLAY|STARPLAY|VISION|HAVOK|BLAST|PRIME|PRIMELUX|PLAY\s*TV/i.test(l)) || "";
+  const painelLine =
+    lines.find((l) => /STAR\s*PLAY|STARPLAY|VISION|HAVOK|BLAST|PRIME|PRIMELUX|PLAY\s*TV|ALLBOX|RYZEEN|TITAN/i.test(l)) || "";
   if (painelLine) out.painel = normalizeServerName(painelLine.replace(/-?\s*IPTV.*/i, "").trim() || painelLine);
 
   const emailLine = lines.find((l) => /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(l));
   if (emailLine) out.email = emailLine;
 
-  const vencLine = lines.find((l) => /^\d{2}\/\d{2}\/\d{4},\s*\d{2}:\d{2}:\d{2}$/.test(l));
-  if (vencLine) out.venc = toIsoDateFromPtDate(vencLine);
+  // venc mais tolerante: pega a primeira data válida que aparecer
+  for (const l of lines) {
+    const iso = tryParsePtDateLineToIso(l);
+    if (iso) {
+      out.venc = iso;
+      break;
+    }
+  }
 
+  // nome padrão: "Nome - ...data..."
   const nameLine = lines.find((l) => /-.*\d{2}\/\d{2}\/\d{4}/.test(l));
   if (nameLine) {
     const nome = nameLine.split("-")[0]?.trim();
     if (nome) out.nome = nome;
+  }
+
+  // fallback: primeira linha "humana"
+  if (!out.nome) {
+    const candidate = lines.find((l) => !isNoiseNameLine(l));
+    if (candidate) out.nome = candidate.trim();
   }
 
   const planoLine = lines.find((l) => /Plano:\s*R\$\s*/i.test(l));
@@ -622,7 +701,7 @@ window.previewImport = () => {
     2
   );
 
-  setImportProgress(0, blocks.length, "Prévia gerada do 1º bloco (com servidor override).");
+  setImportProgress(0, blocks.length, "Prévia gerada do 1º bloco (parser tolerante).");
 };
 
 window.applyImportToClientForm = () => {
@@ -644,7 +723,7 @@ window.applyImportToClientForm = () => {
     id: "",
     nome: parsed.nome || "",
     painel,
-    cycle: "mensal", // padrão; você ajusta depois no form se quiser
+    cycle: "mensal",
     email: parsed.email || "",
     senha: "",
     venc: parsed.venc || "",
@@ -683,17 +762,18 @@ window.importClientsFromText = async () => {
     const painel = importServer ? importServer : normalizeServerName(parsed.painel || "");
     const venc = parsed.venc || "";
 
-    if (!nome || !painel || !venc) {
+    // FIX: não falha por nome; só falha se faltar painel/venc
+    if (!painel || !venc) {
       fail++;
-      setImportProgress(i + 1, blocks.length, `Falhou bloco ${i + 1}/${blocks.length}: faltou nome/painel/vencimento.`);
+      setImportProgress(i + 1, blocks.length, `Falhou bloco ${i + 1}/${blocks.length}: faltou painel ou vencimento.`);
       continue;
     }
 
     try {
       const payload: Omit<Client, "id"> = {
-        nome,
+        nome: nome || "Sem nome",
         painel,
-        cycle: "mensal", // IMPORT não escolhe ciclo (você pediu assim)
+        cycle: "mensal",
         email: parsed.email || "",
         senha: "",
         venc,
@@ -797,7 +877,14 @@ window.refreshFinance = () => {
     .join("");
 };
 
-// ---------- Revendas (mantido) ----------
+// ---------- Revendas ----------
+function getServerCostByName(name: string): number {
+  const s = servers.find((x) => x.name === name);
+  if (s) return Number(s.cost) || 0;
+  if (CASINHA_COST[name] != null) return CASINHA_COST[name];
+  return 0;
+}
+
 function renderRevendasList() {
   const cont = document.getElementById("revendas-list");
   if (!cont) return;
@@ -808,6 +895,7 @@ function renderRevendasList() {
   }
 
   cont.innerHTML = "";
+
   for (const r of revendas) {
     const calc = calcRevendaTotals(r.servers || {});
     const div = document.createElement("div");
@@ -830,6 +918,7 @@ function renderRevendasList() {
 
     div.querySelector('[data-act="edit"]')?.addEventListener("click", () => window.openEditRevenda(r.id));
     div.querySelector('[data-act="del"]')?.addEventListener("click", () => window.deleteRevenda(r.id));
+
     cont.appendChild(div);
   }
 
@@ -904,7 +993,9 @@ function renderRevendaServerGridFromServers(existing?: Record<string, RevendaSer
     if (items.length === 0) continue;
 
     grid.insertAdjacentHTML("beforeend", sectionTitleHtml(g.title));
-    for (const srvName of items) grid.insertAdjacentHTML("beforeend", renderServerRowHtml(srvName, existing?.[srvName]));
+    for (const srvName of items) {
+      grid.insertAdjacentHTML("beforeend", renderServerRowHtml(srvName, existing?.[srvName]));
+    }
   }
 
   grid.querySelectorAll("input[data-srv]").forEach((el) => {
@@ -914,6 +1005,7 @@ function renderRevendaServerGridFromServers(existing?: Record<string, RevendaSer
 
 function readRevendaServersFromInputs(): Record<string, RevendaServerRow> {
   const out: Record<string, RevendaServerRow> = {};
+
   document.querySelectorAll<HTMLInputElement>("#rev-server-grid input[data-srv]").forEach((input) => {
     const srv = input.getAttribute("data-srv") || "";
     const type = input.getAttribute("data-type") as "count" | "price";
@@ -924,7 +1016,10 @@ function readRevendaServersFromInputs(): Record<string, RevendaServerRow> {
     if (type === "price") out[srv].price = Math.max(0, parseNum(input.value));
   });
 
-  for (const [k, v] of Object.entries(out)) if ((v.count || 0) <= 0 && (v.price || 0) <= 0) delete out[k];
+  for (const [k, v] of Object.entries(out)) {
+    if ((v.count || 0) <= 0 && (v.price || 0) <= 0) delete out[k];
+  }
+
   return out;
 }
 
@@ -980,14 +1075,28 @@ window.saveRevenda = async () => {
 
   const id = (document.getElementById("rev-edit-id") as HTMLInputElement | null)?.value || "";
   const nome = (document.getElementById("rev-nome") as HTMLInputElement | null)?.value?.trim() || "";
-  const divisoes = Math.max(1, Math.floor(parseNum((document.getElementById("rev-divisoes") as HTMLInputElement | null)?.value || "1")));
+  const divisoes = Math.max(
+    1,
+    Math.floor(parseNum((document.getElementById("rev-divisoes") as HTMLInputElement | null)?.value || "1"))
+  );
   const payDate1 = (document.getElementById("rev-pay-date-1") as HTMLInputElement | null)?.value || "";
   const payDate2 = (document.getElementById("rev-pay-date-2") as HTMLInputElement | null)?.value || "";
 
-  if (!nome) return alert("Informe o nome do parceiro.");
+  if (!nome) {
+    alert("Informe o nome do parceiro.");
+    return;
+  }
 
   const serversMap = readRevendaServersFromInputs();
-  const payload = { nome, divisoes, payDate1, payDate2, servers: serversMap, updatedAt: new Date().toISOString() };
+
+  const payload = {
+    nome,
+    divisoes,
+    payDate1,
+    payDate2,
+    servers: serversMap,
+    updatedAt: new Date().toISOString()
+  };
 
   if (id) {
     await firebaseApi.updateDoc(firebaseApi.doc(db, "artifacts", appId, "users", currentUserId, "revendas", id), payload);
