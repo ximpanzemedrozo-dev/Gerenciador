@@ -52,6 +52,31 @@ export const appHtml = `
       </div>
     </header>
 
+    <!-- BARRA GLOBAL (sempre visível em qualquer aba) -->
+    <div class="sticky top-[72px] z-40 px-4">
+      <div class="max-w-7xl mx-auto mt-3 mb-2">
+        <div class="rounded-2xl border border-slate-200 bg-white/95 backdrop-blur-md p-4">
+          <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
+            <div>
+              <div class="text-[10px] font-black uppercase tracking-[0.3em] text-slate-400">Custo casinhas (Starplay/Vision)</div>
+              <div id="top-total-casinhas" class="text-2xl font-black text-rose-500 mt-1">R$ 0,00</div>
+            </div>
+            <div>
+              <div class="text-[10px] font-black uppercase tracking-[0.3em] text-slate-400">Total clientes (soma planos)</div>
+              <div id="top-total-plans" class="text-2xl font-black text-slate-900 mt-1">R$ 0,00</div>
+            </div>
+            <div>
+              <div class="text-[10px] font-black uppercase tracking-[0.3em] text-slate-400">Lucro real (Total - casinhas)</div>
+              <div id="top-real-profit" class="text-3xl font-black text-sky-600 mt-1">R$ 0,00</div>
+            </div>
+          </div>
+          <div class="text-[10px] font-bold uppercase tracking-widest text-slate-400 mt-3">
+            Base: clientes filtrados em <span class="text-slate-700">Clientes</span> (Servidor/Ciclo/Busca)
+          </div>
+        </div>
+      </div>
+    </div>
+
     <main class="max-w-7xl mx-auto px-4 pt-5 pb-32">
       <!-- CLIENTES -->
       <section id="view-clients" class="view-section">
@@ -130,7 +155,11 @@ export const appHtml = `
               Selecionados: <span id="clients-bulk-count" class="text-slate-900">0</span>
             </div>
 
-            <div class="flex gap-2">
+            <div class="flex flex-wrap gap-2 justify-end">
+              <button onclick="bulkSelectAllFilteredClients()" class="bg-slate-900 text-white px-4 py-3 rounded-2xl font-black text-xs uppercase">
+                Selecionar Todos
+              </button>
+
               <button onclick="bulkDeleteSelectedClients()" class="bg-red-600 text-white px-4 py-3 rounded-2xl font-black text-xs uppercase">
                 Apagar Selecionados
               </button>
@@ -191,15 +220,10 @@ export const appHtml = `
           </button>
         </div>
 
-        <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
+        <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
           <div class="rounded-2xl border border-slate-200 bg-white p-5">
             <div class="text-[10px] font-black uppercase tracking-[0.3em] text-slate-400">Clientes (filtrados)</div>
             <div id="fin-total-clients" class="text-3xl font-black text-slate-900 mt-2">0</div>
-          </div>
-
-          <div class="rounded-2xl border border-slate-200 bg-white p-5">
-            <div class="text-[10px] font-black uppercase tracking-[0.3em] text-slate-400">Total planos (soma)</div>
-            <div id="fin-total-plans" class="text-3xl font-black text-emerald-600 mt-2">R$ 0,00</div>
           </div>
 
           <div class="rounded-2xl border border-slate-200 bg-white p-5">
