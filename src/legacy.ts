@@ -67,6 +67,10 @@ declare global {
     importClientsFromText: () => Promise<void>;
 
     refreshFinance: () => void;
+
+    toggleBulkSelectClients: (force?: boolean) => void;
+    bulkDeleteSelectedClients: () => Promise<void>;
+    bulkDeleteFilteredClients: () => Promise<void>;
   }
 }
 
@@ -100,6 +104,10 @@ let currentUserId: string | null = null;
 let servers: Server[] = [];
 let revendas: Revenda[] = [];
 let clients: Client[] = [];
+
+// bulk state
+let bulkMode = false;
+let selectedClientIds = new Set<string>();
 
 // ---------- helpers ----------
 function money(n: number) {
@@ -252,8 +260,10 @@ function isNoiseNameLine(line: string): boolean {
   if (/^Criado em/i.test(t)) return true;
   if (/^Plano:\s*R\$\s*/i.test(t)) return true;
   if (/^Conex(ões|oes):/i.test(t)) return true;
+  if (/^Venc:/i.test(t)) return true;
 
-  if (/^[0-9]{5,}$/.test(t)) return true; // id numérico
+  if (/^[0-9]{5,}$/.test(t)) return true; // id numérico (linha inteira)
+  if (/^(id|ID|Id)\s*[:#]?\s*\d{5,}$/.test(t)) return true; // "ID: 123"
   if (/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(t)) return true; // email
   if (tryParsePtDateLineToIso(t)) return true; // datas
 
@@ -262,6 +272,22 @@ function isNoiseNameLine(line: string): boolean {
   if (t.length <= 2) return true;
 
   return false;
+}
+
+function updateClientsCount(visible: number, total: number) {
+  const el = document.getElementById("clients-count");
+  if (!el) return;
+  el.textContent = `${visible}/${total}`;
+}
+
+function updateBulkUi() {
+  const bulkbar = document.getElementById("clients-bulkbar");
+  const bulkCount = document.getElementById("clients-bulk-count");
+  const btn = document.getElementById("btn-bulk");
+
+  if (bulkCount) bulkCount.textContent = String(selectedClientIds.size);
+  if (bulkbar) bulkbar.classList.toggle("hidden", !bulkMode);
+  if (btn) btn.textContent = bulkMode ? "Selecionando" : "Selecionar";
 }
 
 // ---------- install ----------
@@ -359,10 +385,64 @@ window.switchView = (v) => {
   document.querySelectorAll(".nav-btn").forEach((b) => b.classList.remove("active"));
   document.getElementById(`nav-${v}`)?.classList.add("active");
 
-  // quando abrir finance, já renderiza
   if (v === "finance") window.refreshFinance();
 
   createIcons({ icons });
+};
+
+// ---------- bulk ----------
+window.toggleBulkSelectClients = (force?: boolean) => {
+  if (typeof force === "boolean") bulkMode = force;
+  else bulkMode = !bulkMode;
+
+  if (!bulkMode) selectedClientIds = new Set<string>();
+  updateBulkUi();
+  renderClientsList();
+};
+
+window.bulkDeleteSelectedClients = async () => {
+  if (!currentUserId) return;
+  if (selectedClientIds.size === 0) return alert("Selecione pelo menos 1 cliente.");
+
+  if (!confirm(`Apagar ${selectedClientIds.size} clientes selecionados?`)) return;
+
+  const batch = firebaseApi.writeBatch(db);
+  for (const id of selectedClientIds) {
+    const ref = firebaseApi.doc(db, "artifacts", appId, "users", currentUserId, "clients", id);
+    batch.delete(ref);
+  }
+  await batch.commit();
+
+  selectedClientIds = new Set<string>();
+  bulkMode = false;
+  updateBulkUi();
+};
+
+window.bulkDeleteFilteredClients = async () => {
+  if (!currentUserId) return;
+
+  const filtered = getFilteredClients();
+  if (filtered.length === 0) return alert("Não há clientes filtrados para apagar.");
+
+  if (!confirm(`Apagar TODOS os ${filtered.length} clientes filtrados?`)) return;
+
+  // Firestore batch tem limite ~500 operações por commit
+  const ids = filtered.map((c) => c.id);
+  const chunkSize = 450;
+
+  for (let i = 0; i < ids.length; i += chunkSize) {
+    const chunk = ids.slice(i, i + chunkSize);
+    const batch = firebaseApi.writeBatch(db);
+    for (const id of chunk) {
+      const ref = firebaseApi.doc(db, "artifacts", appId, "users", currentUserId, "clients", id);
+      batch.delete(ref);
+    }
+    await batch.commit();
+  }
+
+  selectedClientIds = new Set<string>();
+  bulkMode = false;
+  updateBulkUi();
 };
 
 // ---------- firestore init ----------
@@ -435,19 +515,16 @@ function getFilteredClients(): Client[] {
     if (cycleFilter && (c.cycle || "mensal") !== cycleFilter) return false;
 
     if (!q) return true;
+
+    const qId = q;
     return (
       (c.nome || "").toLowerCase().includes(q) ||
       (c.email || "").toLowerCase().includes(q) ||
       (c.painel || "").toLowerCase().includes(q) ||
-      (c.idExt || "").toLowerCase().includes(q)
+      (c.idExt || "").toLowerCase().includes(qId) ||
+      (c.id || "").toLowerCase().includes(qId)
     );
   });
-}
-
-function updateClientsCount(visible: number, total: number) {
-  const el = document.getElementById("clients-count");
-  if (!el) return;
-  el.textContent = `${visible}/${total}`;
 }
 
 function renderClientsList() {
@@ -456,6 +533,7 @@ function renderClientsList() {
 
   const filtered = getFilteredClients();
   updateClientsCount(filtered.length, clients.length);
+  updateBulkUi();
 
   if (filtered.length === 0) {
     cont.innerHTML = `<div class="rounded-2xl border border-slate-200 bg-white p-6 text-slate-500">Nenhum cliente encontrado.</div>`;
@@ -470,26 +548,66 @@ function renderClientsList() {
     const vencTxt = c.venc ? c.venc.split("-").reverse().join("/") : "-";
     const planoTxt = typeof c.plano === "number" ? money(c.plano) : "-";
     const cycleTxt = (c.cycle || "mensal").toUpperCase();
+    const idExtTxt = c.idExt ? String(c.idExt) : "-";
+
+    const checked = selectedClientIds.has(c.id);
 
     div.innerHTML = `
       <div class="flex justify-between items-start gap-3">
         <div class="min-w-0">
-          <div class="font-black uppercase text-slate-800 truncate">${c.nome || "Sem nome"}</div>
+          <div class="flex items-center gap-3">
+            ${bulkMode ? `<input type="checkbox" class="bulk-check" data-id="${c.id}" ${checked ? "checked" : ""} />` : ""}
+            <div class="font-black uppercase text-slate-800 truncate">${c.nome || "Sem nome"}</div>
+          </div>
+
           <div class="text-[11px] font-bold text-slate-400 uppercase tracking-widest mt-1">${c.painel || "-"}</div>
           <div class="text-[11px] font-bold text-slate-500 uppercase tracking-widest mt-1">${cycleTxt}</div>
           <div class="text-[11px] text-slate-500 mt-1 truncate">${c.email || ""}</div>
-          <div class="text-[11px] font-bold text-slate-400 uppercase tracking-widest mt-2">Venc: ${vencTxt} • Plano: ${planoTxt}</div>
+
+          <div class="text-[11px] font-bold text-slate-400 uppercase tracking-widest mt-2">
+            Venc: ${vencTxt} • Plano: ${planoTxt}
+          </div>
+
+          <div class="text-[11px] font-bold text-slate-400 uppercase tracking-widest mt-1">
+            ID: ${idExtTxt}
+          </div>
         </div>
 
-        <div class="flex flex-col gap-2">
-          <button class="bg-slate-100 px-4 py-2 rounded-xl font-black text-xs uppercase" data-act="edit">Editar</button>
-          <button class="bg-red-50 text-red-600 px-4 py-2 rounded-xl font-black text-xs uppercase" data-act="del">Apagar</button>
-        </div>
+        ${
+          bulkMode
+            ? ``
+            : `<div class="flex flex-col gap-2">
+                <button class="bg-slate-100 px-4 py-2 rounded-xl font-black text-xs uppercase" data-act="edit">Editar</button>
+                <button class="bg-red-50 text-red-600 px-4 py-2 rounded-xl font-black text-xs uppercase" data-act="del">Apagar</button>
+              </div>`
+        }
       </div>
     `;
 
-    div.querySelector('[data-act="edit"]')?.addEventListener("click", () => window.openEditClient(c.id));
-    div.querySelector('[data-act="del"]')?.addEventListener("click", () => window.deleteClient(c.id));
+    if (!bulkMode) {
+      div.querySelector('[data-act="edit"]')?.addEventListener("click", () => window.openEditClient(c.id));
+      div.querySelector('[data-act="del"]')?.addEventListener("click", () => window.deleteClient(c.id));
+    } else {
+      div.querySelector<HTMLInputElement>('input.bulk-check')?.addEventListener("change", (ev) => {
+        const id = (ev.currentTarget as HTMLInputElement).getAttribute("data-id") || "";
+        if (!id) return;
+        if ((ev.currentTarget as HTMLInputElement).checked) selectedClientIds.add(id);
+        else selectedClientIds.delete(id);
+        updateBulkUi();
+      });
+
+      // tocar no card alterna seleção (melhor pra 1 mão no celular)
+      div.addEventListener("click", (ev) => {
+        const t = ev.target as HTMLElement;
+        if (t?.tagName?.toLowerCase() === "input" || t?.tagName?.toLowerCase() === "button") return;
+
+        const id = c.id;
+        if (selectedClientIds.has(id)) selectedClientIds.delete(id);
+        else selectedClientIds.add(id);
+        renderClientsList();
+      });
+    }
+
     cont.appendChild(div);
   }
 
@@ -583,7 +701,7 @@ window.deleteClient = async (id) => {
   await firebaseApi.deleteDoc(firebaseApi.doc(db, "artifacts", appId, "users", currentUserId, "clients", id));
 };
 
-// ---------- Import (SÓ servidor override) ----------
+// ---------- Import ----------
 function parseImportBlock(text: string): Partial<Client> {
   const lines = (text || "")
     .split("\n")
@@ -592,8 +710,19 @@ function parseImportBlock(text: string): Partial<Client> {
 
   const out: Partial<Client> = { obs: "Aplicativo e Mac: ", rawImport: text };
 
-  const idLine = lines.find((l) => /^[0-9]{5,}$/.test(l));
-  if (idLine) out.idExt = idLine;
+  // idExt: aceita "123", "#123", "ID: 123"
+  for (const l of lines) {
+    const m1 = l.match(/^#?(\d{5,})$/);
+    const m2 = l.match(/^(id|ID|Id)\s*[:#]?\s*(\d{5,})$/);
+    if (m1) {
+      out.idExt = m1[1];
+      break;
+    }
+    if (m2) {
+      out.idExt = m2[2];
+      break;
+    }
+  }
 
   const painelLine =
     lines.find((l) => /STAR\s*PLAY|STARPLAY|VISION|HAVOK|BLAST|PRIME|PRIMELUX|PLAY\s*TV|ALLBOX|RYZEEN|TITAN/i.test(l)) || "";
@@ -762,7 +891,6 @@ window.importClientsFromText = async () => {
     const painel = importServer ? importServer : normalizeServerName(parsed.painel || "");
     const venc = parsed.venc || "";
 
-    // FIX: não falha por nome; só falha se faltar painel/venc
     if (!painel || !venc) {
       fail++;
       setImportProgress(i + 1, blocks.length, `Falhou bloco ${i + 1}/${blocks.length}: faltou painel ou vencimento.`);
@@ -805,7 +933,7 @@ window.importClientsFromText = async () => {
   alert(`Importação concluída.\nImportados: ${ok}\nFalhas: ${fail}`);
 };
 
-// ---------- Finance (dashboard "bem" ao abrir) ----------
+// ---------- Finance ----------
 function sumPlan(list: Client[]) {
   return list.reduce((acc, c) => acc + (Number(c.plano) || 0), 0);
 }
