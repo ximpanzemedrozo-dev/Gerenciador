@@ -1,6 +1,6 @@
 export const appHtml = `
   <section id="auth-section" class="fixed inset-0 z-[200] bg-white dark:bg-slate-950 flex items-center justify-center p-6 text-center">
-    <div class="w-full max-w-sm">
+    <div class="w-full max-sm p-6">
       <div class="w-24 h-24 bg-sky-500 rounded-[2.5rem] flex items-center justify-center text-white mx-auto mb-10 rotate-3">
         <i data-lucide="shield-check" class="w-12 h-12"></i>
       </div>
