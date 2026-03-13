@@ -60,6 +60,7 @@ declare global {
     openImportClients: () => void;
     previewImport: () => void;
     applyImportToClientForm: () => void;
+    importClientsFromText: () => Promise<void>;
   }
 }
 
@@ -110,7 +111,6 @@ function parseNum(raw: string): number {
 }
 
 function toIsoDateFromPtDate(d: string): string {
-  // d: DD/MM/YYYY
   const m = d.match(/(\d{2})\/(\d{2})\/(\d{4})/);
   if (!m) return "";
   const [, dd, mm, yyyy] = m;
@@ -136,7 +136,6 @@ function normalizeServerName(raw: string): string {
     if (s.includes("NEON")) return "Havok Neon";
   }
 
-  // fallback: capitaliza
   const clean = raw.trim();
   if (!clean) return "";
   return clean
@@ -178,6 +177,17 @@ function syncUiModeLabel() {
   label.textContent = document.body.classList.contains("compact-ui") ? "Mobile" : "Desktop";
 }
 
+function setImportProgress(done: number, total: number, msg = "") {
+  const bar = document.getElementById("import-bar") as HTMLDivElement | null;
+  const status = document.getElementById("import-status") as HTMLDivElement | null;
+  const log = document.getElementById("import-log") as HTMLDivElement | null;
+
+  const pct = total > 0 ? Math.round((done / total) * 100) : 0;
+  if (bar) bar.style.width = `${pct}%`;
+  if (status) status.textContent = `${done}/${total} (${pct}%)`;
+  if (log && msg) log.textContent = msg;
+}
+
 // ---------- install ----------
 export function installLegacyApp() {
   document.getElementById("btn-login")?.addEventListener("click", () => window.handleAuth("login"));
@@ -200,7 +210,6 @@ export function installLegacyApp() {
       await window.initialize12Servers(user.uid);
       window.startListening(user.uid);
 
-      // listeners de UI
       document.getElementById("clients-search")?.addEventListener("input", () => renderClientsList());
 
       window.switchView("clients");
@@ -352,7 +361,7 @@ function renderClientsList() {
       <div class="flex justify-between items-start gap-3">
         <div class="min-w-0">
           <div class="font-black uppercase text-slate-800 truncate">${c.nome || "Sem nome"}</div>
-          <div class="text-[11px] font-bold text-slate-400 uppercase tracking-widest mt-1">${(c.painel || "-")}</div>
+          <div class="text-[11px] font-bold text-slate-400 uppercase tracking-widest mt-1">${c.painel || "-"}</div>
           <div class="text-[11px] text-slate-500 mt-1 truncate">${c.email || ""}</div>
           <div class="text-[11px] font-bold text-slate-400 uppercase tracking-widest mt-2">Venc: ${vencTxt} • Plano: ${planoTxt}</div>
         </div>
@@ -412,7 +421,10 @@ window.saveClient = async () => {
   const senha = (document.getElementById("client-senha") as HTMLInputElement | null)?.value || "";
   const venc = (document.getElementById("client-venc") as HTMLInputElement | null)?.value || "";
   const plano = parseNum((document.getElementById("client-plano") as HTMLInputElement | null)?.value || "");
-  const conexoes = Math.max(1, Math.floor(parseNum((document.getElementById("client-conexoes") as HTMLInputElement | null)?.value || "1")));
+  const conexoes = Math.max(
+    1,
+    Math.floor(parseNum((document.getElementById("client-conexoes") as HTMLInputElement | null)?.value || "1"))
+  );
   const idExt = (document.getElementById("client-idext") as HTMLInputElement | null)?.value?.trim() || "";
   const obs = (document.getElementById("client-obs") as HTMLInputElement | null)?.value || "";
 
@@ -462,51 +474,76 @@ function parseImportBlock(text: string): Partial<Client> {
     rawImport: text
   };
 
-  // id externo: primeira linha numérica
   const idLine = lines.find((l) => /^[0-9]{5,}$/.test(l));
   if (idLine) out.idExt = idLine;
 
-  // painel: linha que contenha STAR/PLAY/VISION/HAVOK/BLAST/PRIME
-  const painelLine =
-    lines.find((l) => /STAR\s*PLAY|STARPLAY|VISION|HAVOK|BLAST|PRIME|PRIMELUX|PLAY\s*TV/i.test(l)) || "";
+  const painelLine = lines.find((l) => /STAR\s*PLAY|STARPLAY|VISION|HAVOK|BLAST|PRIME|PRIMELUX|PLAY\s*TV/i.test(l)) || "";
   if (painelLine) out.painel = normalizeServerName(painelLine.replace(/-?\s*IPTV.*/i, "").trim() || painelLine);
 
-  // email
   const emailLine = lines.find((l) => /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(l));
   if (emailLine) out.email = emailLine;
 
-  // vencimento: linha com "DD/MM/YYYY, HH:MM:SS" (você confirmou A)
+  // vencimento: DD/MM/YYYY, HH:MM:SS
   const vencLine = lines.find((l) => /^\d{2}\/\d{2}\/\d{4},\s*\d{2}:\d{2}:\d{2}$/.test(l));
   if (vencLine) out.venc = toIsoDateFromPtDate(vencLine);
 
-  // nome: linha que contenha " - DD/MM/YYYY" (pegamos antes do primeiro hífen)
   const nameLine = lines.find((l) => /-.*\d{2}\/\d{2}\/\d{4}/.test(l));
   if (nameLine) {
     const nome = nameLine.split("-")[0]?.trim();
     if (nome) out.nome = nome;
   }
 
-  // plano
   const planoLine = lines.find((l) => /Plano:\s*R\$\s*/i.test(l));
   if (planoLine) out.plano = parseNum(planoLine.replace(/Plano:\s*R\$\s*/i, "").trim());
 
-  // conexões
   const conLine = lines.find((l) => /Conex(ões|oes):/i.test(l));
   if (conLine) out.conexoes = Math.max(1, Math.floor(parseNum(conLine.replace(/Conex(ões|oes):/i, "").trim())));
 
-  // status
   const statusLine = lines.find((l) => /^Ativo$/i.test(l) || /^Inativo$/i.test(l));
   if (statusLine) out.status = statusLine;
 
   return out;
 }
 
+function splitImportBlocks(text: string): string[] {
+  const rawLines = (text || "").split("\n");
+
+  // divide sempre que encontrar uma linha que seja um ID numérico (>=5 dígitos) e que não esteja no meio de um bloco
+  const blocks: string[] = [];
+  let buf: string[] = [];
+
+  const flush = () => {
+    const b = buf.join("\n").trim();
+    if (b) blocks.push(b);
+    buf = [];
+  };
+
+  for (const line of rawLines) {
+    const trimmed = line.trim();
+
+    // novo bloco (quando aparece um id)
+    if (/^[0-9]{5,}$/.test(trimmed)) {
+      // se já estávamos num bloco e já tem conteúdo, fecha e inicia novo
+      if (buf.length > 0) flush();
+    }
+    buf.push(line);
+  }
+
+  flush();
+  return blocks;
+}
+
 window.openImportClients = () => {
   const ta = document.getElementById("import-text") as HTMLTextAreaElement | null;
   const prev = document.getElementById("import-preview") as HTMLElement | null;
+  const log = document.getElementById("import-log") as HTMLElement | null;
+
   if (ta) ta.value = "";
   if (prev) prev.textContent = "";
+  if (log) log.textContent = "";
   lastImportPreview = null;
+
+  setImportProgress(0, 0, "");
   window.toggleModal("import-modal");
 };
 
@@ -515,18 +552,23 @@ window.previewImport = () => {
   const prev = document.getElementById("import-preview") as HTMLElement | null;
   if (!ta || !prev) return;
 
-  lastImportPreview = parseImportBlock(ta.value);
-  prev.textContent = JSON.stringify(lastImportPreview, null, 2);
+  const blocks = splitImportBlocks(ta.value);
+  const first = blocks[0] || "";
+  lastImportPreview = parseImportBlock(first);
+  prev.textContent = JSON.stringify({ blocks: blocks.length, first: lastImportPreview }, null, 2);
+
+  setImportProgress(0, blocks.length, "Prévia gerada do 1º bloco.");
 };
 
 window.applyImportToClientForm = () => {
   const ta = document.getElementById("import-text") as HTMLTextAreaElement | null;
   if (!ta) return;
 
-  const parsed = parseImportBlock(ta.value);
+  const blocks = splitImportBlocks(ta.value);
+  const first = blocks[0] || "";
+  const parsed = parseImportBlock(first);
   lastImportPreview = parsed;
 
-  // abre modal do cliente já preenchido
   const t = document.getElementById("client-modal-title");
   if (t) t.textContent = "Novo Cliente (Importado)";
 
@@ -535,7 +577,7 @@ window.applyImportToClientForm = () => {
     nome: parsed.nome || "",
     painel: parsed.painel || "",
     email: parsed.email || "",
-    senha: "", // você confirmou que vem vazia
+    senha: "",
     venc: parsed.venc || "",
     plano: typeof parsed.plano === "number" ? parsed.plano : 0,
     conexoes: parsed.conexoes ?? 1,
@@ -543,13 +585,77 @@ window.applyImportToClientForm = () => {
     obs: parsed.obs || "Aplicativo e Mac: "
   });
 
-  // fecha import e abre client
   const importEl = document.getElementById("import-modal");
   if (importEl?.classList.contains("active")) window.toggleModal("import-modal");
   if (!document.getElementById("client-modal")?.classList.contains("active")) window.toggleModal("client-modal");
 };
 
-// ---------- Revendas (mantido do seu atual, resumido aqui com o essencial) ----------
+window.importClientsFromText = async () => {
+  if (!currentUserId) return;
+
+  const ta = document.getElementById("import-text") as HTMLTextAreaElement | null;
+  if (!ta) return;
+
+  const blocks = splitImportBlocks(ta.value);
+  if (blocks.length === 0) return alert("Cole pelo menos 1 cliente para importar.");
+
+  let ok = 0;
+  let fail = 0;
+
+  setImportProgress(0, blocks.length, "Iniciando importação...");
+
+  for (let i = 0; i < blocks.length; i++) {
+    const b = blocks[i];
+    const parsed = parseImportBlock(b);
+
+    const nome = (parsed.nome || "").trim();
+    const painel = normalizeServerName(parsed.painel || "");
+    const venc = parsed.venc || "";
+
+    // mínimos obrigatórios pra criar
+    if (!nome || !painel || !venc) {
+      fail++;
+      setImportProgress(i + 1, blocks.length, `Falhou bloco ${i + 1}/${blocks.length}: faltou nome/painel/vencimento.`);
+      continue;
+    }
+
+    try {
+      const payload: Omit<Client, "id"> = {
+        nome,
+        painel,
+        email: parsed.email || "",
+        senha: "", // você pediu vazia
+        venc,
+        plano: typeof parsed.plano === "number" ? parsed.plano : 0,
+        conexoes: parsed.conexoes ?? 1,
+        idExt: parsed.idExt || "",
+        obs: parsed.obs || "Aplicativo e Mac: ",
+        status: parsed.status || "",
+        rawImport: parsed.rawImport || b,
+        updatedAt: new Date().toISOString()
+      };
+
+      await firebaseApi.addDoc(firebaseApi.collection(db, "artifacts", appId, "users", currentUserId, "clients"), {
+        ...payload,
+        createdAt: new Date().toISOString()
+      });
+
+      ok++;
+      setImportProgress(i + 1, blocks.length, `Importando... OK: ${ok} | Falhas: ${fail}`);
+    } catch (e) {
+      fail++;
+      setImportProgress(i + 1, blocks.length, `Erro no bloco ${i + 1}: ${String(e)}`);
+    }
+
+    // dá chance de renderizar a barra no mobile
+    await new Promise((r) => setTimeout(r, 30));
+  }
+
+  setImportProgress(blocks.length, blocks.length, `Finalizado. Importados: ${ok} | Falhas: ${fail}`);
+  alert(`Importação concluída.\nImportados: ${ok}\nFalhas: ${fail}`);
+};
+
+// ---------- Revendas (igual ao que você já tinha) ----------
 function renderRevendasList() {
   const cont = document.getElementById("revendas-list");
   if (!cont) return;
@@ -584,6 +690,7 @@ function renderRevendasList() {
     div.querySelector('[data-act="del"]')?.addEventListener("click", () => window.deleteRevenda(r.id));
     cont.appendChild(div);
   }
+
   createIcons({ icons });
 }
 
