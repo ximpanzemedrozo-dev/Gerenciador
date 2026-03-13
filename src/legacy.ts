@@ -14,6 +14,23 @@ type Revenda = {
   updatedAt?: string;
 };
 
+type Client = {
+  id: string;
+  nome?: string;
+  painel?: string;
+  email?: string;
+  senha?: string;
+  venc?: string; // YYYY-MM-DD
+  plano?: number;
+  conexoes?: number;
+  idExt?: string;
+  obs?: string;
+  status?: string;
+  rawImport?: string;
+  createdAt?: string;
+  updatedAt?: string;
+};
+
 declare global {
   interface Window {
     handleAuth: (mode: "login" | "signup") => Promise<void>;
@@ -25,14 +42,31 @@ declare global {
 
     switchView: (v: string) => void;
 
+    // revendas
     openAddRevenda: () => void;
     openEditRevenda: (id: string) => void;
     saveRevenda: () => Promise<void>;
     deleteRevenda: (id: string) => Promise<void>;
 
+    // ui mode
     toggleUiMode: () => void;
+
+    // clients
+    openAddClient: () => void;
+    openEditClient: (id: string) => void;
+    saveClient: () => Promise<void>;
+    deleteClient: (id: string) => Promise<void>;
+
+    openImportClients: () => void;
+    previewImport: () => void;
+    applyImportToClientForm: () => void;
   }
 }
+
+const CASINHA_COST: Record<string, number> = {
+  Vision: 2.0,
+  Starplay: 2.5
+};
 
 const FULL_SERVERS_LIST = [
   "Havok Radeon",
@@ -51,36 +85,18 @@ const FULL_SERVERS_LIST = [
 ];
 
 const SERVER_GROUPS: Array<{ title: string; servers: string[] }> = [
-  {
-    title: "Havok",
-    servers: ["Havok Radeon", "Havok Kyros", "Havok Andromeda", "Havok Neon"]
-  },
-  {
-    title: "Blast",
-    servers: ["Blast Elite", "Blast Flash", "Play Tv"]
-  },
-  {
-    title: "Premium",
-    servers: ["Primelux"]
-  },
-  {
-    title: "Casinhas",
-    servers: ["Starplay", "Vision"]
-  },
-  {
-    title: "Outros",
-    servers: ["Allbox", "Ryzeen", "Titan"]
-  }
+  { title: "Havok", servers: ["Havok Radeon", "Havok Kyros", "Havok Andromeda", "Havok Neon"] },
+  { title: "Blast", servers: ["Blast Elite", "Blast Flash", "Play Tv"] },
+  { title: "Premium", servers: ["Primelux"] },
+  { title: "Casinhas", servers: ["Starplay", "Vision"] },
+  { title: "Outros", servers: ["Allbox", "Ryzeen", "Titan"] }
 ];
-
-const CASINHA_COST: Record<string, number> = {
-  Vision: 2.0,
-  Starplay: 2.5
-};
 
 let currentUserId: string | null = null;
 let servers: Server[] = [];
 let revendas: Revenda[] = [];
+let clients: Client[] = [];
+let lastImportPreview: Partial<Client> | null = null;
 
 // ---------- helpers ----------
 function money(n: number) {
@@ -93,6 +109,43 @@ function parseNum(raw: string): number {
   return Number.isFinite(n) ? n : 0;
 }
 
+function toIsoDateFromPtDate(d: string): string {
+  // d: DD/MM/YYYY
+  const m = d.match(/(\d{2})\/(\d{2})\/(\d{4})/);
+  if (!m) return "";
+  const [, dd, mm, yyyy] = m;
+  return `${yyyy}-${mm}-${dd}`;
+}
+
+function normalizeServerName(raw: string): string {
+  const s = (raw || "").toUpperCase();
+
+  if (s.includes("STAR") && s.includes("PLAY")) return "Starplay";
+  if (s.includes("STARPLAY")) return "Starplay";
+  if (s.includes("VISION")) return "Vision";
+  if (s.includes("PRIMELUX") || s.includes("PRIME LUX") || s.includes("PRIME")) return "Primelux";
+  if (s.includes("PLAY TV")) return "Play Tv";
+  if (s.includes("BLAST")) {
+    if (s.includes("ELITE")) return "Blast Elite";
+    if (s.includes("FLASH")) return "Blast Flash";
+  }
+  if (s.includes("HAVOK")) {
+    if (s.includes("RADEON")) return "Havok Radeon";
+    if (s.includes("KYROS")) return "Havok Kyros";
+    if (s.includes("ANDROMEDA")) return "Havok Andromeda";
+    if (s.includes("NEON")) return "Havok Neon";
+  }
+
+  // fallback: capitaliza
+  const clean = raw.trim();
+  if (!clean) return "";
+  return clean
+    .split(" ")
+    .filter(Boolean)
+    .map((p) => p.charAt(0).toUpperCase() + p.slice(1).toLowerCase())
+    .join(" ");
+}
+
 function getServerCostByName(name: string): number {
   const s = servers.find((x) => x.name === name);
   if (s) return Number(s.cost) || 0;
@@ -103,7 +156,6 @@ function getServerCostByName(name: string): number {
 function ensureUiToggleButton() {
   const headerRow = document.querySelector("#app-content header .max-w-7xl");
   if (!headerRow) return;
-
   if (document.getElementById("ui-mode-btn")) return;
 
   const btn = document.createElement("button");
@@ -113,7 +165,7 @@ function ensureUiToggleButton() {
   btn.onclick = () => window.toggleUiMode();
   btn.innerHTML = `<span id="ui-mode-label">Mobile</span>`;
 
-  const rightSide = headerRow.querySelector(".flex.gap-3");
+  const rightSide = headerRow.querySelector(".flex.gap-2");
   if (rightSide) rightSide.prepend(btn);
   else headerRow.appendChild(btn);
 
@@ -124,16 +176,6 @@ function syncUiModeLabel() {
   const label = document.getElementById("ui-mode-label");
   if (!label) return;
   label.textContent = document.body.classList.contains("compact-ui") ? "Mobile" : "Desktop";
-}
-
-function getServerListForUi(): string[] {
-  const grouped = SERVER_GROUPS.flatMap((g) => g.servers);
-  const extraFromFirestore = servers
-    .map((s) => s.name)
-    .filter((name) => !grouped.includes(name) && !FULL_SERVERS_LIST.includes(name));
-
-  const extras = [...extraFromFirestore];
-  return [...grouped, ...extras];
 }
 
 // ---------- install ----------
@@ -158,7 +200,10 @@ export function installLegacyApp() {
       await window.initialize12Servers(user.uid);
       window.startListening(user.uid);
 
-      window.switchView("revendas");
+      // listeners de UI
+      document.getElementById("clients-search")?.addEventListener("input", () => renderClientsList());
+
+      window.switchView("clients");
     } else {
       currentUserId = null;
       authDiv.classList.remove("hidden");
@@ -184,7 +229,7 @@ window.handleAuth = async (mode) => {
     if (mode === "login") await firebaseApi.signInWithEmailAndPassword(auth, email, password);
     else await firebaseApi.createUserWithEmailAndPassword(auth, email, password);
   } catch {
-    errorEl.innerText = 'Falha no acesso. Verifique as suas credenciais.';
+    errorEl.innerText = "Falha no acesso. Verifique as suas credenciais.";
     errorEl.classList.remove("hidden");
   }
 };
@@ -244,11 +289,7 @@ window.initialize12Servers = async (userId) => {
 
   for (const name of FULL_SERVERS_LIST) {
     if (!existingNames.includes(name)) {
-      await firebaseApi.addDoc(srvPath, {
-        name,
-        cost: defaults[name] ?? 2.5,
-        createdAt: new Date().toISOString()
-      });
+      await firebaseApi.addDoc(srvPath, { name, cost: defaults[name] ?? 2.5, createdAt: new Date().toISOString() });
     }
   }
 };
@@ -270,9 +311,245 @@ window.startListening = (userId) => {
     revendas = snap.docs.map((d) => ({ id: d.id, ...(d.data() as any) })) as Revenda[];
     renderRevendasList();
   });
+
+  firebaseApi.onSnapshot(firebaseApi.collection(db, "artifacts", appId, "users", userId, "clients"), (snap) => {
+    clients = snap.docs.map((d) => ({ id: d.id, ...(d.data() as any) })) as Client[];
+    renderClientsList();
+  });
 };
 
-// ---------- Revendas UI ----------
+// ---------- Clients ----------
+function renderClientsList() {
+  const cont = document.getElementById("clients-list");
+  if (!cont) return;
+
+  const q = ((document.getElementById("clients-search") as HTMLInputElement | null)?.value || "").toLowerCase().trim();
+
+  const filtered = clients.filter((c) => {
+    if (!q) return true;
+    return (
+      (c.nome || "").toLowerCase().includes(q) ||
+      (c.email || "").toLowerCase().includes(q) ||
+      (c.painel || "").toLowerCase().includes(q) ||
+      (c.idExt || "").toLowerCase().includes(q)
+    );
+  });
+
+  if (filtered.length === 0) {
+    cont.innerHTML = `<div class="rounded-2xl border border-slate-200 bg-white p-6 text-slate-500">Nenhum cliente encontrado.</div>`;
+    return;
+  }
+
+  cont.innerHTML = "";
+  for (const c of filtered) {
+    const div = document.createElement("div");
+    div.className = "rounded-2xl border border-slate-200 bg-white p-5";
+
+    const vencTxt = c.venc ? c.venc.split("-").reverse().join("/") : "-";
+    const planoTxt = typeof c.plano === "number" ? money(c.plano) : "-";
+
+    div.innerHTML = `
+      <div class="flex justify-between items-start gap-3">
+        <div class="min-w-0">
+          <div class="font-black uppercase text-slate-800 truncate">${c.nome || "Sem nome"}</div>
+          <div class="text-[11px] font-bold text-slate-400 uppercase tracking-widest mt-1">${(c.painel || "-")}</div>
+          <div class="text-[11px] text-slate-500 mt-1 truncate">${c.email || ""}</div>
+          <div class="text-[11px] font-bold text-slate-400 uppercase tracking-widest mt-2">Venc: ${vencTxt} • Plano: ${planoTxt}</div>
+        </div>
+
+        <div class="flex flex-col gap-2">
+          <button class="bg-slate-100 px-4 py-2 rounded-xl font-black text-xs uppercase" data-act="edit">Editar</button>
+          <button class="bg-red-50 text-red-600 px-4 py-2 rounded-xl font-black text-xs uppercase" data-act="del">Apagar</button>
+        </div>
+      </div>
+    `;
+
+    div.querySelector('[data-act="edit"]')?.addEventListener("click", () => window.openEditClient(c.id));
+    div.querySelector('[data-act="del"]')?.addEventListener("click", () => window.deleteClient(c.id));
+    cont.appendChild(div);
+  }
+
+  createIcons({ icons });
+}
+
+function setClientForm(data: Partial<Client>) {
+  (document.getElementById("client-edit-id") as HTMLInputElement | null)!.value = data.id || "";
+  (document.getElementById("client-nome") as HTMLInputElement | null)!.value = data.nome || "";
+  (document.getElementById("client-painel") as HTMLInputElement | null)!.value = data.painel || "";
+  (document.getElementById("client-email") as HTMLInputElement | null)!.value = data.email || "";
+  (document.getElementById("client-senha") as HTMLInputElement | null)!.value = data.senha || "";
+  (document.getElementById("client-venc") as HTMLInputElement | null)!.value = data.venc || "";
+  (document.getElementById("client-plano") as HTMLInputElement | null)!.value =
+    typeof data.plano === "number" ? String(data.plano).replace(".", ",") : "";
+  (document.getElementById("client-conexoes") as HTMLInputElement | null)!.value = String(data.conexoes ?? 1);
+  (document.getElementById("client-idext") as HTMLInputElement | null)!.value = data.idExt || "";
+  (document.getElementById("client-obs") as HTMLInputElement | null)!.value = data.obs || "Aplicativo e Mac: ";
+}
+
+window.openAddClient = () => {
+  const t = document.getElementById("client-modal-title");
+  if (t) t.textContent = "Novo Cliente";
+  setClientForm({ id: "", conexoes: 1, obs: "Aplicativo e Mac: " });
+  window.toggleModal("client-modal");
+};
+
+window.openEditClient = (id) => {
+  const c = clients.find((x) => x.id === id);
+  if (!c) return;
+  const t = document.getElementById("client-modal-title");
+  if (t) t.textContent = "Editar Cliente";
+  setClientForm(c);
+  window.toggleModal("client-modal");
+};
+
+window.saveClient = async () => {
+  if (!currentUserId) return;
+
+  const id = (document.getElementById("client-edit-id") as HTMLInputElement | null)?.value || "";
+  const nome = (document.getElementById("client-nome") as HTMLInputElement | null)?.value?.trim() || "";
+  const painel = normalizeServerName((document.getElementById("client-painel") as HTMLInputElement | null)?.value || "");
+  const email = (document.getElementById("client-email") as HTMLInputElement | null)?.value?.trim() || "";
+  const senha = (document.getElementById("client-senha") as HTMLInputElement | null)?.value || "";
+  const venc = (document.getElementById("client-venc") as HTMLInputElement | null)?.value || "";
+  const plano = parseNum((document.getElementById("client-plano") as HTMLInputElement | null)?.value || "");
+  const conexoes = Math.max(1, Math.floor(parseNum((document.getElementById("client-conexoes") as HTMLInputElement | null)?.value || "1")));
+  const idExt = (document.getElementById("client-idext") as HTMLInputElement | null)?.value?.trim() || "";
+  const obs = (document.getElementById("client-obs") as HTMLInputElement | null)?.value || "";
+
+  if (!nome) return alert("Informe o nome do cliente.");
+  if (!painel) return alert("Informe o painel.");
+
+  const payload: Omit<Client, "id"> = {
+    nome,
+    painel,
+    email,
+    senha,
+    venc,
+    plano: Number.isFinite(plano) ? plano : 0,
+    conexoes,
+    idExt,
+    obs,
+    updatedAt: new Date().toISOString()
+  };
+
+  if (id) {
+    await firebaseApi.updateDoc(firebaseApi.doc(db, "artifacts", appId, "users", currentUserId, "clients", id), payload);
+  } else {
+    await firebaseApi.addDoc(firebaseApi.collection(db, "artifacts", appId, "users", currentUserId, "clients"), {
+      ...payload,
+      createdAt: new Date().toISOString()
+    });
+  }
+
+  window.toggleModal("client-modal");
+};
+
+window.deleteClient = async (id) => {
+  if (!currentUserId) return;
+  if (!confirm("Apagar este cliente?")) return;
+  await firebaseApi.deleteDoc(firebaseApi.doc(db, "artifacts", appId, "users", currentUserId, "clients", id));
+};
+
+// ---------- Import ----------
+function parseImportBlock(text: string): Partial<Client> {
+  const lines = (text || "")
+    .split("\n")
+    .map((l) => l.trim())
+    .filter(Boolean);
+
+  const out: Partial<Client> = {
+    obs: "Aplicativo e Mac: ",
+    rawImport: text
+  };
+
+  // id externo: primeira linha numérica
+  const idLine = lines.find((l) => /^[0-9]{5,}$/.test(l));
+  if (idLine) out.idExt = idLine;
+
+  // painel: linha que contenha STAR/PLAY/VISION/HAVOK/BLAST/PRIME
+  const painelLine =
+    lines.find((l) => /STAR\s*PLAY|STARPLAY|VISION|HAVOK|BLAST|PRIME|PRIMELUX|PLAY\s*TV/i.test(l)) || "";
+  if (painelLine) out.painel = normalizeServerName(painelLine.replace(/-?\s*IPTV.*/i, "").trim() || painelLine);
+
+  // email
+  const emailLine = lines.find((l) => /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(l));
+  if (emailLine) out.email = emailLine;
+
+  // vencimento: linha com "DD/MM/YYYY, HH:MM:SS" (você confirmou A)
+  const vencLine = lines.find((l) => /^\d{2}\/\d{2}\/\d{4},\s*\d{2}:\d{2}:\d{2}$/.test(l));
+  if (vencLine) out.venc = toIsoDateFromPtDate(vencLine);
+
+  // nome: linha que contenha " - DD/MM/YYYY" (pegamos antes do primeiro hífen)
+  const nameLine = lines.find((l) => /-.*\d{2}\/\d{2}\/\d{4}/.test(l));
+  if (nameLine) {
+    const nome = nameLine.split("-")[0]?.trim();
+    if (nome) out.nome = nome;
+  }
+
+  // plano
+  const planoLine = lines.find((l) => /Plano:\s*R\$\s*/i.test(l));
+  if (planoLine) out.plano = parseNum(planoLine.replace(/Plano:\s*R\$\s*/i, "").trim());
+
+  // conexões
+  const conLine = lines.find((l) => /Conex(ões|oes):/i.test(l));
+  if (conLine) out.conexoes = Math.max(1, Math.floor(parseNum(conLine.replace(/Conex(ões|oes):/i, "").trim())));
+
+  // status
+  const statusLine = lines.find((l) => /^Ativo$/i.test(l) || /^Inativo$/i.test(l));
+  if (statusLine) out.status = statusLine;
+
+  return out;
+}
+
+window.openImportClients = () => {
+  const ta = document.getElementById("import-text") as HTMLTextAreaElement | null;
+  const prev = document.getElementById("import-preview") as HTMLElement | null;
+  if (ta) ta.value = "";
+  if (prev) prev.textContent = "";
+  lastImportPreview = null;
+  window.toggleModal("import-modal");
+};
+
+window.previewImport = () => {
+  const ta = document.getElementById("import-text") as HTMLTextAreaElement | null;
+  const prev = document.getElementById("import-preview") as HTMLElement | null;
+  if (!ta || !prev) return;
+
+  lastImportPreview = parseImportBlock(ta.value);
+  prev.textContent = JSON.stringify(lastImportPreview, null, 2);
+};
+
+window.applyImportToClientForm = () => {
+  const ta = document.getElementById("import-text") as HTMLTextAreaElement | null;
+  if (!ta) return;
+
+  const parsed = parseImportBlock(ta.value);
+  lastImportPreview = parsed;
+
+  // abre modal do cliente já preenchido
+  const t = document.getElementById("client-modal-title");
+  if (t) t.textContent = "Novo Cliente (Importado)";
+
+  setClientForm({
+    id: "",
+    nome: parsed.nome || "",
+    painel: parsed.painel || "",
+    email: parsed.email || "",
+    senha: "", // você confirmou que vem vazia
+    venc: parsed.venc || "",
+    plano: typeof parsed.plano === "number" ? parsed.plano : 0,
+    conexoes: parsed.conexoes ?? 1,
+    idExt: parsed.idExt || "",
+    obs: parsed.obs || "Aplicativo e Mac: "
+  });
+
+  // fecha import e abre client
+  const importEl = document.getElementById("import-modal");
+  if (importEl?.classList.contains("active")) window.toggleModal("import-modal");
+  if (!document.getElementById("client-modal")?.classList.contains("active")) window.toggleModal("client-modal");
+};
+
+// ---------- Revendas (mantido do seu atual, resumido aqui com o essencial) ----------
 function renderRevendasList() {
   const cont = document.getElementById("revendas-list");
   if (!cont) return;
@@ -283,7 +560,6 @@ function renderRevendasList() {
   }
 
   cont.innerHTML = "";
-
   for (const r of revendas) {
     const calc = calcRevendaTotals(r.servers || {});
     const div = document.createElement("div");
@@ -306,10 +582,8 @@ function renderRevendasList() {
 
     div.querySelector('[data-act="edit"]')?.addEventListener("click", () => window.openEditRevenda(r.id));
     div.querySelector('[data-act="del"]')?.addEventListener("click", () => window.deleteRevenda(r.id));
-
     cont.appendChild(div);
   }
-
   createIcons({ icons });
 }
 
@@ -323,7 +597,6 @@ function calcRevendaTotals(serversMap: Record<string, RevendaServerRow>) {
     const price = Number(data?.price) || 0;
 
     totalPaga += count * price;
-
     if (CASINHA_COST[srvName] != null) totalCasinhas += count * CASINHA_COST[srvName];
     totalCustoServers += count * getServerCostByName(srvName);
   }
@@ -332,7 +605,6 @@ function calcRevendaTotals(serversMap: Record<string, RevendaServerRow>) {
   return { totalPaga, totalCasinhas, totalCustoServers, lucro };
 }
 
-/** cria título de seção no grid */
 function sectionTitleHtml(title: string) {
   return `
     <div class="mt-6 mb-2">
@@ -355,25 +627,12 @@ function renderServerRowHtml(srvName: string, ex?: RevendaServerRow) {
         <div class="grid grid-cols-2 gap-3">
           <div>
             <label class="text-[10px] font-black uppercase text-slate-400 block mb-1">QTD</label>
-            <input
-              class="mini-input"
-              type="number"
-              inputmode="numeric"
-              data-srv="${srvName}"
-              data-type="count"
-              value="${ex?.count ?? 0}"
-            />
+            <input class="mini-input" type="number" inputmode="numeric" data-srv="${srvName}" data-type="count" value="${ex?.count ?? 0}" />
           </div>
 
           <div>
             <label class="text-[10px] font-black uppercase text-slate-400 block mb-1">R$ / cliente</label>
-            <input
-              class="mini-input"
-              inputmode="decimal"
-              data-srv="${srvName}"
-              data-type="price"
-              value="${ex?.price ?? 0}"
-            />
+            <input class="mini-input" inputmode="decimal" data-srv="${srvName}" data-type="price" value="${ex?.price ?? 0}" />
           </div>
         </div>
       </div>
@@ -386,8 +645,6 @@ function renderRevendaServerGridFromServers(existing?: Record<string, RevendaSer
   if (!grid) return;
 
   const firestoreNames = servers.map((s) => s.name);
-  const baseOrder = getServerListForUi();
-
   const allowed = new Set([...FULL_SERVERS_LIST, ...firestoreNames]);
 
   grid.innerHTML = "";
@@ -402,15 +659,6 @@ function renderRevendaServerGridFromServers(existing?: Record<string, RevendaSer
     }
   }
 
-  const grouped = new Set(SERVER_GROUPS.flatMap((g) => g.servers));
-  const extras = baseOrder.filter((name) => allowed.has(name) && !grouped.has(name));
-  if (extras.length) {
-    grid.insertAdjacentHTML("beforeend", sectionTitleHtml("Extras"));
-    for (const srvName of extras) {
-      grid.insertAdjacentHTML("beforeend", renderServerRowHtml(srvName, existing?.[srvName]));
-    }
-  }
-
   grid.querySelectorAll("input[data-srv]").forEach((el) => {
     el.addEventListener("input", () => updateRevendaTotalsFromInputs());
   });
@@ -418,7 +666,6 @@ function renderRevendaServerGridFromServers(existing?: Record<string, RevendaSer
 
 function readRevendaServersFromInputs(): Record<string, RevendaServerRow> {
   const out: Record<string, RevendaServerRow> = {};
-
   document.querySelectorAll<HTMLInputElement>("#rev-server-grid input[data-srv]").forEach((input) => {
     const srv = input.getAttribute("data-srv") || "";
     const type = input.getAttribute("data-type") as "count" | "price";
@@ -432,7 +679,6 @@ function readRevendaServersFromInputs(): Record<string, RevendaServerRow> {
   for (const [k, v] of Object.entries(out)) {
     if ((v.count || 0) <= 0 && (v.price || 0) <= 0) delete out[k];
   }
-
   return out;
 }
 
@@ -450,7 +696,6 @@ function updateRevendaTotalsFromInputs() {
   lucroEl.textContent = money(calc.lucro);
 }
 
-// ---------- Revendas actions ----------
 window.openAddRevenda = () => {
   const title = document.getElementById("revenda-modal-title");
   if (title) title.textContent = "Nova Revenda";
@@ -489,28 +734,14 @@ window.saveRevenda = async () => {
 
   const id = (document.getElementById("rev-edit-id") as HTMLInputElement | null)?.value || "";
   const nome = (document.getElementById("rev-nome") as HTMLInputElement | null)?.value?.trim() || "";
-  const divisoes = Math.max(
-    1,
-    Math.floor(parseNum((document.getElementById("rev-divisoes") as HTMLInputElement | null)?.value || "1"))
-  );
+  const divisoes = Math.max(1, Math.floor(parseNum((document.getElementById("rev-divisoes") as HTMLInputElement | null)?.value || "1")));
   const payDate1 = (document.getElementById("rev-pay-date-1") as HTMLInputElement | null)?.value || "";
   const payDate2 = (document.getElementById("rev-pay-date-2") as HTMLInputElement | null)?.value || "";
 
-  if (!nome) {
-    alert("Informe o nome do parceiro.");
-    return;
-  }
+  if (!nome) return alert("Informe o nome do parceiro.");
 
   const serversMap = readRevendaServersFromInputs();
-
-  const payload = {
-    nome,
-    divisoes,
-    payDate1,
-    payDate2,
-    servers: serversMap,
-    updatedAt: new Date().toISOString()
-  };
+  const payload = { nome, divisoes, payDate1, payDate2, servers: serversMap, updatedAt: new Date().toISOString() };
 
   if (id) {
     await firebaseApi.updateDoc(firebaseApi.doc(db, "artifacts", appId, "users", currentUserId, "revendas", id), payload);
