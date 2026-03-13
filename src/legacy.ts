@@ -14,13 +14,21 @@ type Client = {
   status?: string;
 };
 
+type Revenda = {
+  id: string;
+  nome?: string;
+  painel?: string;
+  custoCredito?: number;
+};
+
 // ---------- Estado Global ----------
 let currentUserId: string | null = null;
 let clients: Client[] = [];
+let revendas: Revenda[] = [];
 let bulkMode = false;
 let selectedClientIds = new Set<string>();
 
-// ---------- Temas ----------
+// ---------- Funções de Tema ----------
 window.switchTheme = (theme: string) => {
   document.body.classList.remove('dark-mode', 'midnight-mode');
   if (theme === 'dark') document.body.classList.add('dark-mode');
@@ -28,7 +36,7 @@ window.switchTheme = (theme: string) => {
   localStorage.setItem('gi-theme', theme);
 };
 
-// ---------- Motor de Importação ----------
+// ---------- Motor de Importação Refinado ----------
 function parseSmartBlock(text: string, forcedServer: string): Partial<Client> | null {
   const idMatch = text.match(/\b(\d{9})\b/);
   if (!idMatch) return null;
@@ -42,8 +50,11 @@ function parseSmartBlock(text: string, forcedServer: string): Partial<Client> | 
   };
 
   if (!forcedServer) {
-    if (text.toUpperCase().includes('STAR PLAY')) result.painel = 'Starplay';
-    else if (text.toUpperCase().includes('VISION')) result.painel = 'Vision';
+    const txtU = text.toUpperCase();
+    if (txtU.includes('STAR PLAY')) result.painel = 'Starplay';
+    else if (txtU.includes('VISION')) result.painel = 'Vision';
+    else if (txtU.includes('PRIME')) result.painel = 'Primelux';
+    else if (txtU.includes('BLAST ELITE')) result.painel = 'Blast Elite';
   }
 
   const dateMatch = text.match(/(\d{2})\/(\d{2})\/(\d{4})/);
@@ -53,9 +64,7 @@ function parseSmartBlock(text: string, forcedServer: string): Partial<Client> | 
   }
 
   const priceMatch = text.match(/Plano:\s*R\$\s*([\d,.]+)/i);
-  if (priceMatch) {
-    result.plano = parseFloat(priceMatch[1].replace('.', '').replace(',', '.'));
-  }
+  if (priceMatch) result.plano = parseFloat(priceMatch[1].replace('.', '').replace(',', '.'));
 
   const lines = text.split('\n').map(l => l.trim()).filter(Boolean);
   lines.forEach(line => {
@@ -87,8 +96,8 @@ window.openEditClient = (id: string) => {
   (document.getElementById("client-nome") as HTMLInputElement).value = c.nome || "";
   (document.getElementById("client-idext") as HTMLInputElement).value = c.idExt || "";
   (document.getElementById("client-painel") as HTMLInputElement).value = c.painel || "";
-  (document.getElementById("client-cycle") as HTMLSelectElement).value = c.cycle || "mensal";
   (document.getElementById("client-venc") as HTMLInputElement).value = c.venc || "";
+  (document.getElementById("client-cycle") as HTMLSelectElement).value = c.cycle || "mensal";
   (document.getElementById("client-plano") as HTMLInputElement).value = (c.plano || 0).toFixed(2);
   (document.getElementById("client-status") as HTMLSelectElement).value = c.status || "Ativo";
   window.toggleModal("client-modal");
@@ -113,6 +122,46 @@ window.saveClient = async () => {
   window.toggleModal("client-modal");
 };
 
+// ---------- CRUD de Revendas ----------
+window.openAddRevenda = () => {
+  (document.getElementById("revenda-edit-id") as HTMLInputElement).value = "";
+  (document.getElementById("revenda-modal-title")!).textContent = "Nova Revenda";
+  (document.getElementById("revenda-nome") as HTMLInputElement).value = "";
+  (document.getElementById("revenda-painel") as HTMLInputElement).value = "";
+  (document.getElementById("revenda-custo") as HTMLInputElement).value = "";
+  window.toggleModal("revenda-modal");
+};
+
+window.openEditRevenda = (id: string) => {
+  const r = revendas.find(x => x.id === id);
+  if (!r) return;
+  (document.getElementById("revenda-edit-id") as HTMLInputElement).value = id;
+  (document.getElementById("revenda-modal-title")!).textContent = "Editar Revenda";
+  (document.getElementById("revenda-nome") as HTMLInputElement).value = r.nome || "";
+  (document.getElementById("revenda-painel") as HTMLInputElement).value = r.painel || "";
+  (document.getElementById("revenda-custo") as HTMLInputElement).value = (r.custoCredito || 0).toFixed(2);
+  window.toggleModal("revenda-modal");
+};
+
+window.saveRevenda = async () => {
+  if (!currentUserId) return;
+  const id = (document.getElementById("revenda-edit-id") as HTMLInputElement).value;
+  const data = {
+    nome: (document.getElementById("revenda-nome") as HTMLInputElement).value,
+    painel: (document.getElementById("revenda-painel") as HTMLInputElement).value,
+    custoCredito: parseFloat((document.getElementById("revenda-custo") as HTMLInputElement).value.replace(',', '.')),
+    updatedAt: new Date().toISOString()
+  };
+  const coll = firebaseApi.collection(db, "artifacts", appId, "users", currentUserId, "revendas");
+  id ? await firebaseApi.updateDoc(firebaseApi.doc(db, "artifacts", appId, "users", currentUserId, "revendas", id), data)
+     : await firebaseApi.addDoc(coll, { ...data, createdAt: data.updatedAt });
+  window.toggleModal("revenda-modal");
+};
+
+window.deleteRevenda = async (id: string) => {
+  if (currentUserId && confirm("Apagar revendedor?")) await firebaseApi.deleteDoc(firebaseApi.doc(db, "artifacts", appId, "users", currentUserId, "revendas", id));
+};
+
 // ---------- Ações em Massa ----------
 window.toggleBulkSelectClients = (force?: boolean) => {
   bulkMode = force !== undefined ? force : !bulkMode;
@@ -134,10 +183,8 @@ function updateBulkCount() {
 
 window.bulkDeleteSelectedClients = async () => {
   if (!currentUserId || !selectedClientIds.size) return;
-  if (!confirm(`Deseja apagar ${selectedClientIds.size} clientes?`)) return;
-  for (const id of selectedClientIds) {
-    await firebaseApi.deleteDoc(firebaseApi.doc(db, "artifacts", appId, "users", currentUserId, "clients", id));
-  }
+  if (!confirm(`Apagar ${selectedClientIds.size} clientes?`)) return;
+  for (const id of selectedClientIds) await firebaseApi.deleteDoc(firebaseApi.doc(db, "artifacts", appId, "users", currentUserId, "clients", id));
   window.toggleBulkSelectClients(false);
 };
 
@@ -146,7 +193,6 @@ function renderClientsList() {
   const cont = document.getElementById("clients-list");
   if (!cont) return;
   cont.innerHTML = "";
-  
   document.getElementById("clients-count")!.textContent = `${clients.length}/${clients.length}`;
 
   clients.forEach(c => {
@@ -154,22 +200,22 @@ function renderClientsList() {
     const div = document.createElement("div");
     div.className = `luxury-card p-5 cursor-pointer transition-all ${isSelected ? 'ring-2 ring-sky-500 bg-sky-50 dark:bg-sky-900/10' : ''}`;
     
-    div.innerHTML = `
+    div.innerHTML = \`
       <div class="flex items-start gap-3">
-        ${bulkMode ? `<div class="w-5 h-5 rounded-full border-2 flex items-center justify-center ${isSelected ? 'bg-sky-500 border-sky-500' : 'border-slate-300'}"><i data-lucide="check" class="w-3 h-3 text-white"></i></div>` : ''}
+        \${bulkMode ? \`<div class="w-5 h-5 rounded-full border-2 flex items-center justify-center \${isSelected ? 'bg-sky-500 border-sky-500' : 'border-slate-300'}"><i data-lucide="check" class="w-3 h-3 text-white"></i></div>\` : ''}
         <div class="flex-1 min-w-0">
-          <div class="font-black uppercase truncate text-slate-800 dark:text-slate-100">${c.nome || 'Sem Nome'}</div>
-          <div class="text-[10px] font-bold text-slate-400 mt-1 uppercase">${c.painel || '-'} • ID: ${c.idExt || '-'} • ${c.status || 'Ativo'}</div>
-          <div class="text-[11px] font-bold text-slate-500 mt-2">VENC: ${c.venc ? c.venc.split('-').reverse().join('/') : '-'} • R$ ${c.plano?.toFixed(2)}</div>
+          <div class="font-black uppercase truncate text-slate-800 dark:text-slate-100">\${c.nome || 'Sem Nome'}</div>
+          <div class="text-[10px] font-bold text-slate-400 mt-1 uppercase">\${c.painel || '-'} • ID: \${c.idExt || '-'} • \${c.status || 'Ativo'}</div>
+          <div class="text-[11px] font-bold text-slate-500 mt-2">VENC: \${c.venc ? c.venc.split('-').reverse().join('/') : '-'} • R$ \${c.plano?.toFixed(2)}</div>
         </div>
-        ${!bulkMode ? `
+        \${!bulkMode ? \`
           <div class="flex flex-col gap-2">
-            <button onclick="window.openEditClient('${c.id}')" class="text-sky-500 p-1"><i data-lucide="edit-3" class="w-4 h-4"></i></button>
-            <button onclick="window.deleteClient('${c.id}')" class="text-red-400 p-1"><i data-lucide="trash-2" class="w-4 h-4"></i></button>
+            <button onclick="window.openEditClient('\${c.id}')" class="text-sky-500 p-1"><i data-lucide="edit-3" class="w-4 h-4"></i></button>
+            <button onclick="window.deleteClient('\${c.id}')" class="text-red-400 p-1"><i data-lucide="trash-2" class="w-4 h-4"></i></button>
           </div>
-        ` : ''}
+        \` : ''}
       </div>
-    `;
+    \`;
 
     div.onclick = () => {
       if (bulkMode) {
@@ -183,13 +229,39 @@ function renderClientsList() {
   createIcons({ icons });
 }
 
+function renderRevendasList() {
+  const cont = document.getElementById("revendas-list");
+  if (!cont) return;
+  cont.innerHTML = "";
+
+  revendas.forEach(r => {
+    const div = document.createElement("div");
+    div.className = "luxury-card p-5";
+    div.innerHTML = \`
+      <div class="flex justify-between items-start">
+        <div>
+          <div class="font-black uppercase text-slate-800 dark:text-slate-100">\${r.nome}</div>
+          <div class="text-[10px] font-bold text-slate-400 mt-1 uppercase">Painel: \${r.painel || '-'}</div>
+          <div class="text-[11px] font-bold text-sky-500 mt-2">Custo Crédito: R$ \${r.custoCredito?.toFixed(2)}</div>
+        </div>
+        <div class="flex gap-2">
+          <button onclick="window.openEditRevenda('\${r.id}')" class="text-sky-500 p-1"><i data-lucide="edit-3" class="w-4 h-4"></i></button>
+          <button onclick="window.deleteRevenda('\${r.id}')" class="text-red-400 p-1"><i data-lucide="trash-2" class="w-4 h-4"></i></button>
+        </div>
+      </div>
+    \`;
+    cont.appendChild(div);
+  });
+  createIcons({ icons });
+}
+
 // ---------- Importação ----------
 window.previewImport = () => {
   const text = (document.getElementById("import-text") as HTMLTextAreaElement).value;
   const forced = (document.getElementById("import-target-server") as HTMLSelectElement).value;
-  const blocks = text.match(/\d{9}[\s\S]*?(?=\d{9}|$)/g);
-  if (blocks) {
-    const data = parseSmartBlock(blocks[0], forced);
+  const firstBlock = text.match(/\d{9}[\s\S]*?(?=\d{9}|$)/);
+  if (firstBlock) {
+    const data = parseSmartBlock(firstBlock[0], forced);
     document.getElementById("import-preview")!.textContent = JSON.stringify(data, null, 2);
   }
 };
@@ -200,27 +272,27 @@ window.importClientsFromText = async () => {
   const forced = (document.getElementById("import-target-server") as HTMLSelectElement).value;
   const blocks = text.match(/\d{9}[\s\S]*?(?=\d{9}|$)/g);
   
-  if (!blocks || !blocks.length) return alert("Nenhum cliente detectado.");
+  if (!blocks) return alert("Nenhum ID de 9 dígitos encontrado.");
 
-  document.getElementById('import-status-area')?.classList.remove('hidden');
+  const area = document.getElementById('import-status-area');
   const bar = document.getElementById("import-bar");
+  const txt = document.getElementById("import-status");
+  area?.classList.remove('hidden');
 
   for (let i = 0; i < blocks.length; i++) {
     const data = parseSmartBlock(blocks[i], forced);
-    if (data) {
-      await firebaseApi.addDoc(firebaseApi.collection(db, "artifacts", appId, "users", currentUserId, "clients"), {
-        ...data, createdAt: new Date().toISOString()
-      });
-    }
-    if (bar) bar.style.width = `${((i + 1) / blocks.length) * 100}%`;
+    if (data) await firebaseApi.addDoc(firebaseApi.collection(db, "artifacts", appId, "users", currentUserId, "clients"), { ...data, createdAt: new Date().toISOString() });
+    if (bar) bar.style.width = ((i + 1) / blocks.length * 100) + "%";
+    if (txt) txt.textContent = "Processando: " + (i + 1) + "/" + blocks.length;
   }
+  
   alert("Finalizado!");
   window.toggleModal("import-modal");
   (document.getElementById("import-text") as HTMLTextAreaElement).value = "";
-  document.getElementById('import-status-area')?.classList.add('hidden');
+  area?.classList.add('hidden');
 };
 
-// ---------- Inicialização ----------
+// ---------- Inicialização e Escuta ----------
 export function installLegacyApp() {
   const savedTheme = localStorage.getItem('gi-theme') || 'light';
   window.switchTheme(savedTheme);
@@ -236,17 +308,23 @@ export function installLegacyApp() {
 }
 
 window.startListening = (uid) => {
+  // Clientes
   firebaseApi.onSnapshot(firebaseApi.collection(db, "artifacts", appId, "users", uid, "clients"), snap => {
     clients = snap.docs.map(d => ({ id: d.id, ...d.data() })) as Client[];
     renderClientsList();
     refreshTopProfitBar();
   });
+  // Revendas
+  firebaseApi.onSnapshot(firebaseApi.collection(db, "artifacts", appId, "users", uid, "revendas"), snap => {
+    revendas = snap.docs.map(d => ({ id: d.id, ...d.data() })) as Revenda[];
+    renderRevendasList();
+  });
 };
 
 function refreshTopProfitBar() {
-  const mensalistas = clients.filter(c => (c.cycle || 'mensal') === 'mensal');
-  const total = mensalistas.reduce((acc, c) => acc + (c.plano || 0), 0);
-  const custos = mensalistas.filter(c => c.painel === 'Starplay').length * 2.5 + mensalistas.filter(c => c.painel === 'Vision').length * 2.0;
+  const mensais = clients.filter(c => (c.cycle || 'mensal') === 'mensal');
+  const total = mensais.reduce((acc, c) => acc + (c.plano || 0), 0);
+  const custos = mensais.filter(c => c.painel === 'Starplay').length * 2.5 + mensais.filter(c => c.painel === 'Vision').length * 2.0;
   
   document.getElementById("top-total-plans")!.textContent = "R$ " + total.toFixed(2);
   document.getElementById("top-total-casinhas")!.textContent = "R$ " + custos.toFixed(2);
@@ -257,7 +335,7 @@ function refreshTopProfitBar() {
 window.handleAuth = async (m) => {
   const e = (document.getElementById("auth-email") as HTMLInputElement).value;
   const p = (document.getElementById("auth-password") as HTMLInputElement).value;
-  try { if (m === 'login') await firebaseApi.signInWithEmailAndPassword(auth, e, p); } catch { alert("Erro de login."); }
+  try { if (m === 'login') await firebaseApi.signInWithEmailAndPassword(auth, e, p); } catch { alert("Erro."); }
 };
 window.logout = () => firebaseApi.signOut(auth);
 window.switchView = (v) => {
@@ -269,6 +347,4 @@ window.switchView = (v) => {
 };
 window.toggleModal = (id) => document.getElementById(id)?.classList.toggle('active');
 window.openImportClients = () => window.toggleModal('import-modal');
-window.deleteClient = async (id) => {
-  if (currentUserId && confirm("Apagar cliente?")) await firebaseApi.deleteDoc(firebaseApi.doc(db, "artifacts", appId, "users", currentUserId, "clients", id));
-};
+window.deleteClient = async (id) => { if (currentUserId && confirm("Apagar?")) await firebaseApi.deleteDoc(firebaseApi.doc(db, "artifacts", appId, "users", currentUserId, "clients", id)); };
