@@ -28,7 +28,7 @@ let revendas: Revenda[] = [];
 let bulkMode = false;
 let selectedClientIds = new Set<string>();
 
-// ---------- Funções de Tema ----------
+// ---------- Temas ----------
 window.switchTheme = (theme: string) => {
   document.body.classList.remove('dark-mode', 'midnight-mode');
   if (theme === 'dark') document.body.classList.add('dark-mode');
@@ -36,44 +36,46 @@ window.switchTheme = (theme: string) => {
   localStorage.setItem('gi-theme', theme);
 };
 
-// ---------- Motor de Importação Refinado ----------
-function parseSmartBlock(text: string, forcedServer: string): Partial<Client> | null {
-  const idMatch = text.match(/\b(\d{9})\b/);
-  if (!idMatch) return null;
+// ---------- Lógica de Lucro Real (Cálculo Específico) ----------
+function refreshTopProfitBar() {
+  const totalPlansEl = document.getElementById("top-total-plans");
+  const totalCasinhasEl = document.getElementById("top-total-casinhas");
+  const realProfitEl = document.getElementById("top-real-profit");
 
-  const result: Partial<Client> = {
-    idExt: idMatch[1],
-    cycle: 'mensal',
-    status: 'Ativo',
-    plano: 20,
-    painel: forcedServer || 'Outros'
-  };
+  if (!totalPlansEl || !totalCasinhasEl || !realProfitEl) return;
 
-  if (!forcedServer) {
-    const txtU = text.toUpperCase();
-    if (txtU.includes('STAR PLAY')) result.painel = 'Starplay';
-    else if (txtU.includes('VISION')) result.painel = 'Vision';
-    else if (txtU.includes('PRIME')) result.painel = 'Primelux';
-    else if (txtU.includes('BLAST ELITE')) result.painel = 'Blast Elite';
-  }
+  // 1. Faturamento Bruto: Soma total de todos os planos cadastrados
+  const totalFaturamento = clients.reduce((acc, c) => acc + (Number(c.plano) || 0), 0);
 
-  const dateMatch = text.match(/(\d{2})\/(\d{2})\/(\d{4})/);
-  if (dateMatch) {
-    const [, d, m, y] = dateMatch;
-    result.venc = `${y}-${m}-${d}`;
-  }
-
-  const priceMatch = text.match(/Plano:\s*R\$\s*([\d,.]+)/i);
-  if (priceMatch) result.plano = parseFloat(priceMatch[1].replace('.', '').replace(',', '.'));
-
-  const lines = text.split('\n').map(l => l.trim()).filter(Boolean);
-  lines.forEach(line => {
-    if (line.includes(' - ') && !line.includes('Criado em') && !line.includes('STAR PLAY')) {
-       result.nome = line.split(' - ')[0].trim();
+  // 2. Custo Total Corrigido:
+  // Starplay = 2.50 | Vision = 2.00 | Outros = 0.00
+  const totalCusto = clients.reduce((acc, c) => {
+    const painel = (c.painel || "").trim();
+    let custoUnitario = 0;
+    
+    if (painel === "Starplay") {
+      custoUnitario = 2.50;
+    } else if (painel === "Vision") {
+      custoUnitario = 2.00;
+    } else {
+      custoUnitario = 0; // Outros servidores mantém 0 conforme solicitado
     }
-  });
+    
+    return acc + custoUnitario;
+  }, 0);
 
-  return result;
+  // 3. Lucro Real
+  const lucroReal = totalFaturamento - totalCusto;
+
+  totalPlansEl.textContent = "R$ " + totalFaturamento.toLocaleString("pt-BR", { minimumFractionDigits: 2 });
+  totalCasinhasEl.textContent = "R$ " + totalCusto.toLocaleString("pt-BR", { minimumFractionDigits: 2 });
+  realProfitEl.textContent = "R$ " + lucroReal.toLocaleString("pt-BR", { minimumFractionDigits: 2 });
+  
+  const countEl = document.getElementById("clients-count");
+  if (countEl) {
+    const filteredLength = getFilteredClients().length;
+    countEl.textContent = `${filteredLength}/${clients.length}`;
+  }
 }
 
 // ---------- CRUD de Clientes ----------
@@ -82,9 +84,6 @@ window.openAddClient = () => {
   (document.getElementById("client-modal-title")!).textContent = "Novo Cliente";
   (document.getElementById("client-nome") as HTMLInputElement).value = "";
   (document.getElementById("client-idext") as HTMLInputElement).value = "";
-  (document.getElementById("client-painel") as HTMLInputElement).value = "";
-  (document.getElementById("client-venc") as HTMLInputElement).value = "";
-  (document.getElementById("client-plano") as HTMLInputElement).value = "20.00";
   window.toggleModal("client-modal");
 };
 
@@ -96,10 +95,9 @@ window.openEditClient = (id: string) => {
   (document.getElementById("client-nome") as HTMLInputElement).value = c.nome || "";
   (document.getElementById("client-idext") as HTMLInputElement).value = c.idExt || "";
   (document.getElementById("client-painel") as HTMLInputElement).value = c.painel || "";
-  (document.getElementById("client-venc") as HTMLInputElement).value = c.venc || "";
   (document.getElementById("client-cycle") as HTMLSelectElement).value = c.cycle || "mensal";
+  (document.getElementById("client-venc") as HTMLInputElement).value = c.venc || "";
   (document.getElementById("client-plano") as HTMLInputElement).value = (c.plano || 0).toFixed(2);
-  (document.getElementById("client-status") as HTMLSelectElement).value = c.status || "Ativo";
   window.toggleModal("client-modal");
 };
 
@@ -113,7 +111,6 @@ window.saveClient = async () => {
     cycle: (document.getElementById("client-cycle") as HTMLSelectElement).value,
     venc: (document.getElementById("client-venc") as HTMLInputElement).value,
     plano: parseFloat((document.getElementById("client-plano") as HTMLInputElement).value.replace(',', '.')),
-    status: (document.getElementById("client-status") as HTMLSelectElement).value,
     updatedAt: new Date().toISOString()
   };
   const coll = firebaseApi.collection(db, "artifacts", appId, "users", currentUserId, "clients");
@@ -122,148 +119,30 @@ window.saveClient = async () => {
   window.toggleModal("client-modal");
 };
 
-// ---------- CRUD de Revendas ----------
-window.openAddRevenda = () => {
-  (document.getElementById("revenda-edit-id") as HTMLInputElement).value = "";
-  (document.getElementById("revenda-modal-title")!).textContent = "Nova Revenda";
-  (document.getElementById("revenda-nome") as HTMLInputElement).value = "";
-  (document.getElementById("revenda-painel") as HTMLInputElement).value = "";
-  (document.getElementById("revenda-custo") as HTMLInputElement).value = "";
-  window.toggleModal("revenda-modal");
-};
-
-window.openEditRevenda = (id: string) => {
-  const r = revendas.find(x => x.id === id);
-  if (!r) return;
-  (document.getElementById("revenda-edit-id") as HTMLInputElement).value = id;
-  (document.getElementById("revenda-modal-title")!).textContent = "Editar Revenda";
-  (document.getElementById("revenda-nome") as HTMLInputElement).value = r.nome || "";
-  (document.getElementById("revenda-painel") as HTMLInputElement).value = r.painel || "";
-  (document.getElementById("revenda-custo") as HTMLInputElement).value = (r.custoCredito || 0).toFixed(2);
-  window.toggleModal("revenda-modal");
-};
-
-window.saveRevenda = async () => {
-  if (!currentUserId) return;
-  const id = (document.getElementById("revenda-edit-id") as HTMLInputElement).value;
-  const data = {
-    nome: (document.getElementById("revenda-nome") as HTMLInputElement).value,
-    painel: (document.getElementById("revenda-painel") as HTMLInputElement).value,
-    custoCredito: parseFloat((document.getElementById("revenda-custo") as HTMLInputElement).value.replace(',', '.')),
-    updatedAt: new Date().toISOString()
-  };
-  const coll = firebaseApi.collection(db, "artifacts", appId, "users", currentUserId, "revendas");
-  id ? await firebaseApi.updateDoc(firebaseApi.doc(db, "artifacts", appId, "users", currentUserId, "revendas", id), data)
-     : await firebaseApi.addDoc(coll, { ...data, createdAt: data.updatedAt });
-  window.toggleModal("revenda-modal");
-};
-
-window.deleteRevenda = async (id: string) => {
-  if (currentUserId && confirm("Apagar revendedor?")) await firebaseApi.deleteDoc(firebaseApi.doc(db, "artifacts", appId, "users", currentUserId, "revendas", id));
-};
-
-// ---------- Ações em Massa ----------
-window.toggleBulkSelectClients = (force?: boolean) => {
-  bulkMode = force !== undefined ? force : !bulkMode;
-  selectedClientIds.clear();
-  document.getElementById('clients-bulkbar')?.classList.toggle('hidden', !bulkMode);
-  renderClientsList();
-};
-
-window.bulkSelectAllFilteredClients = () => {
-  clients.forEach(c => selectedClientIds.add(c.id));
-  updateBulkCount();
-  renderClientsList();
-};
-
-function updateBulkCount() {
-  const el = document.getElementById('clients-bulk-count');
-  if (el) el.textContent = String(selectedClientIds.size);
+// ---------- Motor de Importação ----------
+function parseSmartBlock(text: string, forcedServer: string): Partial<Client> | null {
+  const idMatch = text.match(/\b(\d{9})\b/);
+  if (!idMatch) return null;
+  const result: Partial<Client> = { idExt: idMatch[1], cycle: 'mensal', status: 'Ativo', plano: 20, painel: forcedServer || 'Outros' };
+  if (!forcedServer) {
+    const t = text.toUpperCase();
+    if (t.includes('STAR PLAY')) result.painel = 'Starplay';
+    else if (t.includes('VISION')) result.painel = 'Vision';
+  }
+  const dateMatch = text.match(/(\d{2})\/(\d{2})\/(\d{4})/);
+  if (dateMatch) { const [, d, m, y] = dateMatch; result.venc = `${y}-${m}-${d}`; }
+  const priceMatch = text.match(/Plano:\s*R\$\s*([\d,.]+)/i);
+  if (priceMatch) result.plano = parseFloat(priceMatch[1].replace('.', '').replace(',', '.'));
+  const lines = text.split('\n').map(l => l.trim()).filter(Boolean);
+  lines.forEach(line => { if (line.includes(' - ') && !line.includes('Criado em')) result.nome = line.split(' - ')[0].trim(); });
+  return result;
 }
 
-window.bulkDeleteSelectedClients = async () => {
-  if (!currentUserId || !selectedClientIds.size) return;
-  if (!confirm(`Apagar ${selectedClientIds.size} clientes?`)) return;
-  for (const id of selectedClientIds) await firebaseApi.deleteDoc(firebaseApi.doc(db, "artifacts", appId, "users", currentUserId, "clients", id));
-  window.toggleBulkSelectClients(false);
-};
-
-// ---------- Renderização ----------
-function renderClientsList() {
-  const cont = document.getElementById("clients-list");
-  if (!cont) return;
-  cont.innerHTML = "";
-  document.getElementById("clients-count")!.textContent = `${clients.length}/${clients.length}`;
-
-  clients.forEach(c => {
-    const isSelected = selectedClientIds.has(c.id);
-    const div = document.createElement("div");
-    div.className = `luxury-card p-5 cursor-pointer transition-all ${isSelected ? 'ring-2 ring-sky-500 bg-sky-50 dark:bg-sky-900/10' : ''}`;
-    
-    div.innerHTML = \`
-      <div class="flex items-start gap-3">
-        \${bulkMode ? \`<div class="w-5 h-5 rounded-full border-2 flex items-center justify-center \${isSelected ? 'bg-sky-500 border-sky-500' : 'border-slate-300'}"><i data-lucide="check" class="w-3 h-3 text-white"></i></div>\` : ''}
-        <div class="flex-1 min-w-0">
-          <div class="font-black uppercase truncate text-slate-800 dark:text-slate-100">\${c.nome || 'Sem Nome'}</div>
-          <div class="text-[10px] font-bold text-slate-400 mt-1 uppercase">\${c.painel || '-'} • ID: \${c.idExt || '-'} • \${c.status || 'Ativo'}</div>
-          <div class="text-[11px] font-bold text-slate-500 mt-2">VENC: \${c.venc ? c.venc.split('-').reverse().join('/') : '-'} • R$ \${c.plano?.toFixed(2)}</div>
-        </div>
-        \${!bulkMode ? \`
-          <div class="flex flex-col gap-2">
-            <button onclick="window.openEditClient('\${c.id}')" class="text-sky-500 p-1"><i data-lucide="edit-3" class="w-4 h-4"></i></button>
-            <button onclick="window.deleteClient('\${c.id}')" class="text-red-400 p-1"><i data-lucide="trash-2" class="w-4 h-4"></i></button>
-          </div>
-        \` : ''}
-      </div>
-    \`;
-
-    div.onclick = () => {
-      if (bulkMode) {
-        isSelected ? selectedClientIds.delete(c.id) : selectedClientIds.add(c.id);
-        updateBulkCount();
-        renderClientsList();
-      }
-    };
-    cont.appendChild(div);
-  });
-  createIcons({ icons });
-}
-
-function renderRevendasList() {
-  const cont = document.getElementById("revendas-list");
-  if (!cont) return;
-  cont.innerHTML = "";
-
-  revendas.forEach(r => {
-    const div = document.createElement("div");
-    div.className = "luxury-card p-5";
-    div.innerHTML = \`
-      <div class="flex justify-between items-start">
-        <div>
-          <div class="font-black uppercase text-slate-800 dark:text-slate-100">\${r.nome}</div>
-          <div class="text-[10px] font-bold text-slate-400 mt-1 uppercase">Painel: \${r.painel || '-'}</div>
-          <div class="text-[11px] font-bold text-sky-500 mt-2">Custo Crédito: R$ \${r.custoCredito?.toFixed(2)}</div>
-        </div>
-        <div class="flex gap-2">
-          <button onclick="window.openEditRevenda('\${r.id}')" class="text-sky-500 p-1"><i data-lucide="edit-3" class="w-4 h-4"></i></button>
-          <button onclick="window.deleteRevenda('\${r.id}')" class="text-red-400 p-1"><i data-lucide="trash-2" class="w-4 h-4"></i></button>
-        </div>
-      </div>
-    \`;
-    cont.appendChild(div);
-  });
-  createIcons({ icons });
-}
-
-// ---------- Importação ----------
 window.previewImport = () => {
   const text = (document.getElementById("import-text") as HTMLTextAreaElement).value;
   const forced = (document.getElementById("import-target-server") as HTMLSelectElement).value;
-  const firstBlock = text.match(/\d{9}[\s\S]*?(?=\d{9}|$)/);
-  if (firstBlock) {
-    const data = parseSmartBlock(firstBlock[0], forced);
-    document.getElementById("import-preview")!.textContent = JSON.stringify(data, null, 2);
-  }
+  const blocks = text.match(/\d{9}[\s\S]*?(?=\d{9}|$)/g);
+  if (blocks) { const data = parseSmartBlock(blocks[0], forced); document.getElementById("import-preview")!.textContent = JSON.stringify(data, null, 2); }
 };
 
 window.importClientsFromText = async () => {
@@ -271,65 +150,90 @@ window.importClientsFromText = async () => {
   const text = (document.getElementById("import-text") as HTMLTextAreaElement).value;
   const forced = (document.getElementById("import-target-server") as HTMLSelectElement).value;
   const blocks = text.match(/\d{9}[\s\S]*?(?=\d{9}|$)/g);
-  
-  if (!blocks) return alert("Nenhum ID de 9 dígitos encontrado.");
-
-  const area = document.getElementById('import-status-area');
-  const bar = document.getElementById("import-bar");
-  const txt = document.getElementById("import-status");
-  area?.classList.remove('hidden');
-
+  if (!blocks) return alert("Nenhum cliente encontrado.");
   for (let i = 0; i < blocks.length; i++) {
     const data = parseSmartBlock(blocks[i], forced);
     if (data) await firebaseApi.addDoc(firebaseApi.collection(db, "artifacts", appId, "users", currentUserId, "clients"), { ...data, createdAt: new Date().toISOString() });
-    if (bar) bar.style.width = ((i + 1) / blocks.length * 100) + "%";
-    if (txt) txt.textContent = "Processando: " + (i + 1) + "/" + blocks.length;
   }
-  
   alert("Finalizado!");
   window.toggleModal("import-modal");
-  (document.getElementById("import-text") as HTMLTextAreaElement).value = "";
-  area?.classList.add('hidden');
 };
 
-// ---------- Inicialização e Escuta ----------
-export function installLegacyApp() {
-  const savedTheme = localStorage.getItem('gi-theme') || 'light';
-  window.switchTheme(savedTheme);
+// ---------- Filtros e Busca ----------
+function getFilteredClients() {
+  const q = ((document.getElementById("clients-search") as HTMLInputElement)?.value || "").toLowerCase().trim();
+  const srv = (document.getElementById("clients-filter-server") as HTMLSelectElement)?.value || "";
+  const cyc = (document.getElementById("clients-filter-cycle") as HTMLSelectElement)?.value || "";
 
-  firebaseApi.onAuthStateChanged(auth, async (user) => {
-    if (user) {
-      currentUserId = user.uid;
-      document.getElementById("auth-section")?.classList.add("hidden");
-      document.getElementById("app-content")?.classList.remove("hidden");
-      window.startListening(user.uid);
+  return clients.filter(c => {
+    if (srv && (c.painel || "") !== srv) return false;
+    if (cyc && (c.cycle || "mensal") !== cyc) return false;
+    if (!q) return true;
+    return (c.nome || "").toLowerCase().includes(q) || (c.idExt || "").toLowerCase().includes(q) || (c.email || "").toLowerCase().includes(q);
+  });
+}
+
+function renderClientsList() {
+  const cont = document.getElementById("clients-list");
+  if (!cont) return;
+  cont.innerHTML = "";
+  const filtered = getFilteredClients();
+  filtered.forEach(c => {
+    const sel = selectedClientIds.has(c.id);
+    const div = document.createElement("div");
+    div.className = `luxury-card p-5 cursor-pointer transition-all ${sel ? 'ring-2 ring-sky-500 bg-sky-50 dark:bg-sky-900/10' : ''}`;
+    div.innerHTML = `
+      <div class="flex justify-between items-start">
+        <div class="flex items-center gap-3">
+          ${bulkMode ? `<input type="checkbox" ${sel ? "checked" : ""}>` : ''}
+          <div class="min-w-0">
+            <div class="font-black uppercase truncate text-slate-800 dark:text-slate-100">${c.nome || 'Sem Nome'}</div>
+            <div class="text-[9px] font-bold text-slate-400 mt-1 uppercase">${c.painel || '-'} • ID: ${c.idExt || '-'}</div>
+            <div class="text-[10px] font-bold text-slate-500 mt-2">VENC: ${c.venc ? c.venc.split('-').reverse().join('/') : '-'} • R$ ${c.plano?.toFixed(2)}</div>
+          </div>
+        </div>
+        ${!bulkMode ? `
+          <div class="flex flex-col gap-2">
+            <button onclick="window.openEditClient('${c.id}')" class="text-sky-500 p-1"><i data-lucide="edit-2" class="w-4 h-4"></i></button>
+            <button onclick="window.deleteClient('${c.id}')" class="text-red-400 p-1"><i data-lucide="trash-2" class="w-4 h-4"></i></button>
+          </div>
+        ` : ''}
+      </div>
+    `;
+    div.onclick = () => { if (bulkMode) { sel ? selectedClientIds.delete(c.id) : selectedClientIds.add(c.id); renderClientsList(); } };
+    cont.appendChild(div);
+  });
+  createIcons({ icons });
+}
+
+// ---------- Ações em Massa ----------
+window.toggleBulkSelectClients = (force?: boolean) => { bulkMode = force !== undefined ? force : !bulkMode; selectedClientIds.clear(); document.getElementById('clients-bulkbar')?.classList.toggle('hidden', !bulkMode); renderClientsList(); };
+window.bulkSelectAllFilteredClients = () => { getFilteredClients().forEach(c => selectedClientIds.add(c.id)); renderClientsList(); };
+window.bulkDeleteSelectedClients = async () => { if (confirm(\`Apagar \${selectedClientIds.size}?\`)) { for (const id of selectedClientIds) await firebaseApi.deleteDoc(firebaseApi.doc(db, "artifacts", appId, "users", currentUserId!, "clients", id)); window.toggleBulkSelectClients(false); } };
+
+// ---------- Inicialização ----------
+export function installLegacyApp() {
+  window.switchTheme(localStorage.getItem('gi-theme') || 'light');
+  firebaseApi.onAuthStateChanged(auth, user => {
+    if (user) { 
+      currentUserId = user.uid; 
+      document.getElementById("auth-section")?.classList.add("hidden"); 
+      document.getElementById("app-content")?.classList.remove("hidden"); 
+      window.startListening(user.uid); 
+      document.getElementById("clients-search")?.addEventListener("input", renderClientsList);
+      document.getElementById("clients-filter-server")?.addEventListener("change", () => { renderClientsList(); refreshTopProfitBar(); });
+      document.getElementById("clients-filter-cycle")?.addEventListener("change", () => { renderClientsList(); refreshTopProfitBar(); });
     }
   });
 }
 
 window.startListening = (uid) => {
-  // Clientes
-  firebaseApi.onSnapshot(firebaseApi.collection(db, "artifacts", appId, "users", uid, "clients"), snap => {
-    clients = snap.docs.map(d => ({ id: d.id, ...d.data() })) as Client[];
+  firebaseApi.onSnapshot(firebaseApi.collection(db, "artifacts", appId, "users", uid, "clients"), s => {
+    clients = s.docs.map(d => ({ id: d.id, ...d.data() })) as Client[];
     renderClientsList();
     refreshTopProfitBar();
   });
-  // Revendas
-  firebaseApi.onSnapshot(firebaseApi.collection(db, "artifacts", appId, "users", uid, "revendas"), snap => {
-    revendas = snap.docs.map(d => ({ id: d.id, ...d.data() })) as Revenda[];
-    renderRevendasList();
-  });
 };
-
-function refreshTopProfitBar() {
-  const mensais = clients.filter(c => (c.cycle || 'mensal') === 'mensal');
-  const total = mensais.reduce((acc, c) => acc + (c.plano || 0), 0);
-  const custos = mensais.filter(c => c.painel === 'Starplay').length * 2.5 + mensais.filter(c => c.painel === 'Vision').length * 2.0;
-  
-  document.getElementById("top-total-plans")!.textContent = "R$ " + total.toFixed(2);
-  document.getElementById("top-total-casinhas")!.textContent = "R$ " + custos.toFixed(2);
-  document.getElementById("top-real-profit")!.textContent = "R$ " + (total - custos).toFixed(2);
-}
 
 // Globais Auxiliares
 window.handleAuth = async (m) => {
@@ -347,4 +251,5 @@ window.switchView = (v) => {
 };
 window.toggleModal = (id) => document.getElementById(id)?.classList.toggle('active');
 window.openImportClients = () => window.toggleModal('import-modal');
-window.deleteClient = async (id) => { if (currentUserId && confirm("Apagar?")) await firebaseApi.deleteDoc(firebaseApi.doc(db, "artifacts", appId, "users", currentUserId, "clients", id)); };
+window.deleteClient = async (id) => { if (confirm("Apagar?")) await firebaseApi.deleteDoc(firebaseApi.doc(db, "artifacts", appId, "users", currentUserId!, "clients", id)); };
+window.openAddRevenda = () => {}; window.saveRevenda = async () => {}; window.refreshFinance = () => {};
