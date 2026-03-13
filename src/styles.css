@@ -1,3 +1,28 @@
 @import "tailwindcss";
 
-/* depois a gente cola aqui todos os estilos premium do seu app antigo */
+.modal-overlay {
+  display: none;
+  position: fixed;
+  inset: 0;
+  background: rgba(15, 23, 42, 0.72);
+  backdrop-filter: blur(10px);
+  z-index: 9999;
+
+  /* centraliza o modal */
+  align-items: center;
+  justify-content: center;
+
+  /* scroll correto */
+  padding: 1rem;
+  overflow: auto;
+}
+
+.modal-overlay.active {
+  display: flex;
+}
+
+.modal-overlay > div {
+  width: min(960px, 100%);
+  max-height: calc(100vh - 2rem);
+  overflow: auto;
+}
