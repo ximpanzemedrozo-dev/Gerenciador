@@ -58,7 +58,10 @@ export const appHtml = `
         <div class="flex flex-col gap-3 md:flex-row md:items-center md:justify-between mb-4">
           <div>
             <h2 class="text-2xl font-black italic uppercase tracking-tighter">Clientes</h2>
-            <p class="text-xs font-bold text-slate-400 uppercase tracking-widest mt-1">Cadastro + Importação</p>
+            <p class="text-xs font-bold text-slate-400 uppercase tracking-widest mt-1">
+              Cadastro + Importação • <span class="text-slate-600">Clientes:</span>
+              <span id="clients-count" class="text-slate-900">0/0</span>
+            </p>
           </div>
 
           <div class="flex gap-2">
@@ -145,7 +148,7 @@ export const appHtml = `
         </div>
       </section>
 
-      <!-- FINANCE (AGORA COM DASH) -->
+      <!-- FINANCE -->
       <section id="view-finance" class="view-section hidden">
         <div class="flex items-end justify-between mb-4">
           <div>
@@ -283,7 +286,7 @@ export const appHtml = `
     </div>
   </div>
 
-  <!-- MODAL: IMPORTAR CLIENTES (SÓ SERVIDOR) -->
+  <!-- MODAL: IMPORTAR CLIENTES -->
   <div id="import-modal" class="modal-overlay" onclick="toggleModal('import-modal')">
     <div class="bg-white dark:bg-slate-900 w-full max-w-3xl rounded-[2.5rem] p-6 shadow-3xl max-h-[90vh] overflow-y-auto" onclick="event.stopPropagation()">
       <div class="flex items-start justify-between gap-4">
