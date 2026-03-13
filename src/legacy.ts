@@ -14,19 +14,25 @@ type Revenda = {
   updatedAt?: string;
 };
 
+type BillingCycle = "mensal" | "bimestral" | "trimestral" | "semestral" | "anual";
+
 type Client = {
   id: string;
   nome?: string;
   painel?: string;
+  cycle?: BillingCycle;
+
   email?: string;
   senha?: string;
   venc?: string; // YYYY-MM-DD
+
   plano?: number;
   conexoes?: number;
   idExt?: string;
   obs?: string;
   status?: string;
   rawImport?: string;
+
   createdAt?: string;
   updatedAt?: string;
 };
@@ -42,19 +48,14 @@ declare global {
 
     switchView: (v: string) => void;
 
-    // revendas
     openAddRevenda: () => void;
     openEditRevenda: (id: string) => void;
     saveRevenda: () => Promise<void>;
     deleteRevenda: (id: string) => Promise<void>;
 
-    // ui mode
     toggleUiMode: () => void;
-
-    // logout (FIX: sem sigmaDB)
     logout: () => Promise<void>;
 
-    // clients
     openAddClient: () => void;
     openEditClient: (id: string) => void;
     saveClient: () => Promise<void>;
@@ -64,13 +65,12 @@ declare global {
     previewImport: () => void;
     applyImportToClientForm: () => void;
     importClientsFromText: () => Promise<void>;
+
+    refreshFinance: () => void;
   }
 }
 
-const CASINHA_COST: Record<string, number> = {
-  Vision: 2.0,
-  Starplay: 2.5
-};
+const CASINHA_COST: Record<string, number> = { Vision: 2.0, Starplay: 2.5 };
 
 const FULL_SERVERS_LIST = [
   "Havok Radeon",
@@ -100,7 +100,6 @@ let currentUserId: string | null = null;
 let servers: Server[] = [];
 let revendas: Revenda[] = [];
 let clients: Client[] = [];
-let lastImportPreview: Partial<Client> | null = null;
 
 // ---------- helpers ----------
 function money(n: number) {
@@ -148,11 +147,13 @@ function normalizeServerName(raw: string): string {
     .join(" ");
 }
 
-function getServerCostByName(name: string): number {
-  const s = servers.find((x) => x.name === name);
-  if (s) return Number(s.cost) || 0;
-  if (CASINHA_COST[name] != null) return CASINHA_COST[name];
-  return 0;
+function normalizeCycle(raw: string): BillingCycle {
+  const s = (raw || "").toLowerCase().trim();
+  if (s === "bimestral") return "bimestral";
+  if (s === "trimestral") return "trimestral";
+  if (s === "semestral") return "semestral";
+  if (s === "anual") return "anual";
+  return "mensal";
 }
 
 function ensureUiToggleButton() {
@@ -191,6 +192,20 @@ function setImportProgress(done: number, total: number, msg = "") {
   if (log && msg) log.textContent = msg;
 }
 
+function isoToday(): string {
+  const d = new Date();
+  const yyyy = d.getFullYear();
+  const mm = String(d.getMonth() + 1).padStart(2, "0");
+  const dd = String(d.getDate()).padStart(2, "0");
+  return `${yyyy}-${mm}-${dd}`;
+}
+
+function daysBetweenIso(a: string, b: string): number {
+  const da = new Date(a + "T00:00:00");
+  const db = new Date(b + "T00:00:00");
+  return Math.floor((db.getTime() - da.getTime()) / (1000 * 60 * 60 * 24));
+}
+
 // ---------- install ----------
 export function installLegacyApp() {
   document.getElementById("btn-login")?.addEventListener("click", () => window.handleAuth("login"));
@@ -214,6 +229,14 @@ export function installLegacyApp() {
       window.startListening(user.uid);
 
       document.getElementById("clients-search")?.addEventListener("input", () => renderClientsList());
+      document.getElementById("clients-filter-server")?.addEventListener("change", () => {
+        renderClientsList();
+        window.refreshFinance();
+      });
+      document.getElementById("clients-filter-cycle")?.addEventListener("change", () => {
+        renderClientsList();
+        window.refreshFinance();
+      });
 
       window.switchView("clients");
     } else {
@@ -268,7 +291,6 @@ window.toggleUiMode = () => {
 };
 
 window.logout = async () => {
-  // FIX: logout oficial do Firebase Auth (sem sigmaDB)
   await firebaseApi.signOut(auth);
 };
 
@@ -278,6 +300,9 @@ window.switchView = (v) => {
 
   document.querySelectorAll(".nav-btn").forEach((b) => b.classList.remove("active"));
   document.getElementById(`nav-${v}`)?.classList.add("active");
+
+  // quando abrir finance, já renderiza
+  if (v === "finance") window.refreshFinance();
 
   createIcons({ icons });
 };
@@ -312,6 +337,12 @@ window.initialize12Servers = async (userId) => {
 };
 
 window.startListening = (userId) => {
+  firebaseApi.onSnapshot(firebaseApi.collection(db, "artifacts", appId, "users", userId, "clients"), (snap) => {
+    clients = snap.docs.map((d) => ({ id: d.id, ...(d.data() as any) })) as Client[];
+    renderClientsList();
+    window.refreshFinance();
+  });
+
   firebaseApi.onSnapshot(firebaseApi.collection(db, "artifacts", appId, "users", userId, "servers"), (snap) => {
     servers = snap.docs.map((d) => {
       const data = d.data() as any;
@@ -328,21 +359,23 @@ window.startListening = (userId) => {
     revendas = snap.docs.map((d) => ({ id: d.id, ...(d.data() as any) })) as Revenda[];
     renderRevendasList();
   });
-
-  firebaseApi.onSnapshot(firebaseApi.collection(db, "artifacts", appId, "users", userId, "clients"), (snap) => {
-    clients = snap.docs.map((d) => ({ id: d.id, ...(d.data() as any) })) as Client[];
-    renderClientsList();
-  });
 };
 
 // ---------- Clients ----------
-function renderClientsList() {
-  const cont = document.getElementById("clients-list");
-  if (!cont) return;
-
+function currentClientFilters() {
   const q = ((document.getElementById("clients-search") as HTMLInputElement | null)?.value || "").toLowerCase().trim();
+  const serverFilter = (document.getElementById("clients-filter-server") as HTMLSelectElement | null)?.value || "";
+  const cycleFilter = (document.getElementById("clients-filter-cycle") as HTMLSelectElement | null)?.value || "";
+  return { q, serverFilter, cycleFilter };
+}
 
-  const filtered = clients.filter((c) => {
+function getFilteredClients(): Client[] {
+  const { q, serverFilter, cycleFilter } = currentClientFilters();
+
+  return clients.filter((c) => {
+    if (serverFilter && (c.painel || "") !== serverFilter) return false;
+    if (cycleFilter && (c.cycle || "mensal") !== cycleFilter) return false;
+
     if (!q) return true;
     return (
       (c.nome || "").toLowerCase().includes(q) ||
@@ -351,6 +384,13 @@ function renderClientsList() {
       (c.idExt || "").toLowerCase().includes(q)
     );
   });
+}
+
+function renderClientsList() {
+  const cont = document.getElementById("clients-list");
+  if (!cont) return;
+
+  const filtered = getFilteredClients();
 
   if (filtered.length === 0) {
     cont.innerHTML = `<div class="rounded-2xl border border-slate-200 bg-white p-6 text-slate-500">Nenhum cliente encontrado.</div>`;
@@ -364,12 +404,14 @@ function renderClientsList() {
 
     const vencTxt = c.venc ? c.venc.split("-").reverse().join("/") : "-";
     const planoTxt = typeof c.plano === "number" ? money(c.plano) : "-";
+    const cycleTxt = (c.cycle || "mensal").toUpperCase();
 
     div.innerHTML = `
       <div class="flex justify-between items-start gap-3">
         <div class="min-w-0">
           <div class="font-black uppercase text-slate-800 truncate">${c.nome || "Sem nome"}</div>
           <div class="text-[11px] font-bold text-slate-400 uppercase tracking-widest mt-1">${c.painel || "-"}</div>
+          <div class="text-[11px] font-bold text-slate-500 uppercase tracking-widest mt-1">${cycleTxt}</div>
           <div class="text-[11px] text-slate-500 mt-1 truncate">${c.email || ""}</div>
           <div class="text-[11px] font-bold text-slate-400 uppercase tracking-widest mt-2">Venc: ${vencTxt} • Plano: ${planoTxt}</div>
         </div>
@@ -393,9 +435,12 @@ function setClientForm(data: Partial<Client>) {
   (document.getElementById("client-edit-id") as HTMLInputElement | null)!.value = data.id || "";
   (document.getElementById("client-nome") as HTMLInputElement | null)!.value = data.nome || "";
   (document.getElementById("client-painel") as HTMLInputElement | null)!.value = data.painel || "";
+  (document.getElementById("client-cycle") as HTMLSelectElement | null)!.value = (data.cycle as any) || "mensal";
+
   (document.getElementById("client-email") as HTMLInputElement | null)!.value = data.email || "";
   (document.getElementById("client-senha") as HTMLInputElement | null)!.value = data.senha || "";
   (document.getElementById("client-venc") as HTMLInputElement | null)!.value = data.venc || "";
+
   (document.getElementById("client-plano") as HTMLInputElement | null)!.value =
     typeof data.plano === "number" ? String(data.plano).replace(".", ",") : "";
   (document.getElementById("client-conexoes") as HTMLInputElement | null)!.value = String(data.conexoes ?? 1);
@@ -406,7 +451,7 @@ function setClientForm(data: Partial<Client>) {
 window.openAddClient = () => {
   const t = document.getElementById("client-modal-title");
   if (t) t.textContent = "Novo Cliente";
-  setClientForm({ id: "", conexoes: 1, obs: "Aplicativo e Mac: " });
+  setClientForm({ id: "", conexoes: 1, obs: "Aplicativo e Mac: ", cycle: "mensal" });
   window.toggleModal("client-modal");
 };
 
@@ -425,6 +470,8 @@ window.saveClient = async () => {
   const id = (document.getElementById("client-edit-id") as HTMLInputElement | null)?.value || "";
   const nome = (document.getElementById("client-nome") as HTMLInputElement | null)?.value?.trim() || "";
   const painel = normalizeServerName((document.getElementById("client-painel") as HTMLInputElement | null)?.value || "");
+  const cycle = normalizeCycle((document.getElementById("client-cycle") as HTMLSelectElement | null)?.value || "mensal");
+
   const email = (document.getElementById("client-email") as HTMLInputElement | null)?.value?.trim() || "";
   const senha = (document.getElementById("client-senha") as HTMLInputElement | null)?.value || "";
   const venc = (document.getElementById("client-venc") as HTMLInputElement | null)?.value || "";
@@ -442,6 +489,7 @@ window.saveClient = async () => {
   const payload: Omit<Client, "id"> = {
     nome,
     painel,
+    cycle,
     email,
     senha,
     venc,
@@ -470,17 +518,14 @@ window.deleteClient = async (id) => {
   await firebaseApi.deleteDoc(firebaseApi.doc(db, "artifacts", appId, "users", currentUserId, "clients", id));
 };
 
-// ---------- Import ----------
+// ---------- Import (SÓ servidor override) ----------
 function parseImportBlock(text: string): Partial<Client> {
   const lines = (text || "")
     .split("\n")
     .map((l) => l.trim())
     .filter(Boolean);
 
-  const out: Partial<Client> = {
-    obs: "Aplicativo e Mac: ",
-    rawImport: text
-  };
+  const out: Partial<Client> = { obs: "Aplicativo e Mac: ", rawImport: text };
 
   const idLine = lines.find((l) => /^[0-9]{5,}$/.test(l));
   if (idLine) out.idExt = idLine;
@@ -514,7 +559,6 @@ function parseImportBlock(text: string): Partial<Client> {
 
 function splitImportBlocks(text: string): string[] {
   const rawLines = (text || "").split("\n");
-
   const blocks: string[] = [];
   let buf: string[] = [];
 
@@ -526,7 +570,6 @@ function splitImportBlocks(text: string): string[] {
 
   for (const line of rawLines) {
     const trimmed = line.trim();
-
     if (/^[0-9]{5,}$/.test(trimmed)) {
       if (buf.length > 0) flush();
     }
@@ -537,6 +580,10 @@ function splitImportBlocks(text: string): string[] {
   return blocks;
 }
 
+function getImportServerOverride() {
+  return (document.getElementById("import-server") as HTMLSelectElement | null)?.value || "";
+}
+
 window.openImportClients = () => {
   const ta = document.getElementById("import-text") as HTMLTextAreaElement | null;
   const prev = document.getElementById("import-preview") as HTMLElement | null;
@@ -545,7 +592,9 @@ window.openImportClients = () => {
   if (ta) ta.value = "";
   if (prev) prev.textContent = "";
   if (log) log.textContent = "";
-  lastImportPreview = null;
+
+  const srvSel = document.getElementById("import-server") as HTMLSelectElement | null;
+  if (srvSel) srvSel.value = "";
 
   setImportProgress(0, 0, "");
   window.toggleModal("import-modal");
@@ -556,22 +605,37 @@ window.previewImport = () => {
   const prev = document.getElementById("import-preview") as HTMLElement | null;
   if (!ta || !prev) return;
 
+  const importServer = getImportServerOverride();
+
   const blocks = splitImportBlocks(ta.value);
   const first = blocks[0] || "";
-  lastImportPreview = parseImportBlock(first);
-  prev.textContent = JSON.stringify({ blocks: blocks.length, first: lastImportPreview }, null, 2);
+  const parsed = parseImportBlock(first);
 
-  setImportProgress(0, blocks.length, "Prévia gerada do 1º bloco.");
+  const preview = {
+    ...parsed,
+    painel: importServer ? importServer : parsed.painel
+  };
+
+  prev.textContent = JSON.stringify(
+    { blocks: blocks.length, overrides: { importServer: importServer || "AUTO" }, first: preview },
+    null,
+    2
+  );
+
+  setImportProgress(0, blocks.length, "Prévia gerada do 1º bloco (com servidor override).");
 };
 
 window.applyImportToClientForm = () => {
   const ta = document.getElementById("import-text") as HTMLTextAreaElement | null;
   if (!ta) return;
 
+  const importServer = getImportServerOverride();
+
   const blocks = splitImportBlocks(ta.value);
   const first = blocks[0] || "";
   const parsed = parseImportBlock(first);
-  lastImportPreview = parsed;
+
+  const painel = importServer ? importServer : normalizeServerName(parsed.painel || "");
 
   const t = document.getElementById("client-modal-title");
   if (t) t.textContent = "Novo Cliente (Importado)";
@@ -579,7 +643,8 @@ window.applyImportToClientForm = () => {
   setClientForm({
     id: "",
     nome: parsed.nome || "",
-    painel: parsed.painel || "",
+    painel,
+    cycle: "mensal", // padrão; você ajusta depois no form se quiser
     email: parsed.email || "",
     senha: "",
     venc: parsed.venc || "",
@@ -600,6 +665,8 @@ window.importClientsFromText = async () => {
   const ta = document.getElementById("import-text") as HTMLTextAreaElement | null;
   if (!ta) return;
 
+  const importServer = getImportServerOverride();
+
   const blocks = splitImportBlocks(ta.value);
   if (blocks.length === 0) return alert("Cole pelo menos 1 cliente para importar.");
 
@@ -613,7 +680,7 @@ window.importClientsFromText = async () => {
     const parsed = parseImportBlock(b);
 
     const nome = (parsed.nome || "").trim();
-    const painel = normalizeServerName(parsed.painel || "");
+    const painel = importServer ? importServer : normalizeServerName(parsed.painel || "");
     const venc = parsed.venc || "";
 
     if (!nome || !painel || !venc) {
@@ -626,6 +693,7 @@ window.importClientsFromText = async () => {
       const payload: Omit<Client, "id"> = {
         nome,
         painel,
+        cycle: "mensal", // IMPORT não escolhe ciclo (você pediu assim)
         email: parsed.email || "",
         senha: "",
         venc,
@@ -657,7 +725,79 @@ window.importClientsFromText = async () => {
   alert(`Importação concluída.\nImportados: ${ok}\nFalhas: ${fail}`);
 };
 
-// ---------- Revendas ----------
+// ---------- Finance (dashboard "bem" ao abrir) ----------
+function sumPlan(list: Client[]) {
+  return list.reduce((acc, c) => acc + (Number(c.plano) || 0), 0);
+}
+
+function countDueSoon(list: Client[], days = 7) {
+  const today = isoToday();
+  return list.filter((c) => {
+    if (!c.venc) return false;
+    const diff = daysBetweenIso(today, c.venc);
+    return diff >= 0 && diff <= days;
+  }).length;
+}
+
+function groupKey(c: Client) {
+  const cycle = c.cycle || "mensal";
+  const painel = c.painel || "-";
+  return `${cycle}__${painel}`;
+}
+
+window.refreshFinance = () => {
+  const list = getFilteredClients();
+
+  const totalClientsEl = document.getElementById("fin-total-clients");
+  const totalPlansEl = document.getElementById("fin-total-plans");
+  const dueSoonEl = document.getElementById("fin-due-soon");
+  const breakdownEl = document.getElementById("fin-breakdown");
+
+  if (!totalClientsEl || !totalPlansEl || !dueSoonEl || !breakdownEl) return;
+
+  totalClientsEl.textContent = String(list.length);
+  totalPlansEl.textContent = money(sumPlan(list));
+  dueSoonEl.textContent = String(countDueSoon(list, 7));
+
+  const groups = new Map<string, { cycle: string; painel: string; count: number; total: number }>();
+  for (const c of list) {
+    const key = groupKey(c);
+    const [cycle, painel] = key.split("__");
+    const current = groups.get(key) || { cycle, painel, count: 0, total: 0 };
+    current.count += 1;
+    current.total += Number(c.plano) || 0;
+    groups.set(key, current);
+  }
+
+  const rows = Array.from(groups.values()).sort((a, b) => (a.cycle + a.painel).localeCompare(b.cycle + b.painel));
+
+  if (rows.length === 0) {
+    breakdownEl.innerHTML = `<div class="text-sm text-slate-500">Sem dados com os filtros atuais.</div>`;
+    return;
+  }
+
+  breakdownEl.innerHTML = rows
+    .map((r) => {
+      return `
+        <div class="rounded-2xl border border-slate-200 p-4 bg-slate-50">
+          <div class="flex items-start justify-between gap-3">
+            <div>
+              <div class="font-black uppercase text-slate-800">${r.cycle.toUpperCase()}</div>
+              <div class="text-[11px] font-bold text-slate-400 uppercase tracking-widest mt-1">${r.painel}</div>
+              <div class="text-xs text-slate-600 mt-2">Clientes: <span class="font-black">${r.count}</span></div>
+            </div>
+            <div class="text-right">
+              <div class="text-[10px] font-black uppercase tracking-[0.3em] text-slate-400">Total</div>
+              <div class="text-xl font-black text-emerald-600">${money(r.total)}</div>
+            </div>
+          </div>
+        </div>
+      `;
+    })
+    .join("");
+};
+
+// ---------- Revendas (mantido) ----------
 function renderRevendasList() {
   const cont = document.getElementById("revendas-list");
   if (!cont) return;
@@ -706,6 +846,7 @@ function calcRevendaTotals(serversMap: Record<string, RevendaServerRow>) {
     const price = Number(data?.price) || 0;
 
     totalPaga += count * price;
+
     if (CASINHA_COST[srvName] != null) totalCasinhas += count * CASINHA_COST[srvName];
     totalCustoServers += count * getServerCostByName(srvName);
   }
@@ -763,9 +904,7 @@ function renderRevendaServerGridFromServers(existing?: Record<string, RevendaSer
     if (items.length === 0) continue;
 
     grid.insertAdjacentHTML("beforeend", sectionTitleHtml(g.title));
-    for (const srvName of items) {
-      grid.insertAdjacentHTML("beforeend", renderServerRowHtml(srvName, existing?.[srvName]));
-    }
+    for (const srvName of items) grid.insertAdjacentHTML("beforeend", renderServerRowHtml(srvName, existing?.[srvName]));
   }
 
   grid.querySelectorAll("input[data-srv]").forEach((el) => {
@@ -785,9 +924,7 @@ function readRevendaServersFromInputs(): Record<string, RevendaServerRow> {
     if (type === "price") out[srv].price = Math.max(0, parseNum(input.value));
   });
 
-  for (const [k, v] of Object.entries(out)) {
-    if ((v.count || 0) <= 0 && (v.price || 0) <= 0) delete out[k];
-  }
+  for (const [k, v] of Object.entries(out)) if ((v.count || 0) <= 0 && (v.price || 0) <= 0) delete out[k];
   return out;
 }
 
