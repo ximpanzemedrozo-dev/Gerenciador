@@ -333,8 +333,6 @@ function refreshTopProfitBar() {
   if (metaEl) {
     metaEl.textContent = `Starplay: ${qtdStarplay} (R$ ${CASINHA_COST.Starplay.toFixed(2)}) • Vision: ${qtdVision} (R$ ${CASINHA_COST.Vision.toFixed(2)})`;
   }
-}
-
 // ---------- install ----------
 export function installLegacyApp() {
   document.getElementById("btn-login")?.addEventListener("click", () => window.handleAuth("login"));
