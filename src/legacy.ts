@@ -29,6 +29,8 @@ declare global {
     openEditRevenda: (id: string) => void;
     saveRevenda: () => Promise<void>;
     deleteRevenda: (id: string) => Promise<void>;
+
+    toggleUiMode: () => void;
   }
 }
 
@@ -74,10 +76,43 @@ function getServerCostByName(name: string): number {
   return 0;
 }
 
+function ensureUiToggleButton() {
+  const headerRow = document.querySelector("#app-content header .max-w-7xl");
+  if (!headerRow) return;
+
+  // evita duplicar
+  if (document.getElementById("ui-mode-btn")) return;
+
+  const btn = document.createElement("button");
+  btn.id = "ui-mode-btn";
+  btn.className = "ui-toggle-btn";
+  btn.type = "button";
+  btn.onclick = () => window.toggleUiMode();
+  btn.innerHTML = `<span id="ui-mode-label">Mobile</span>`;
+
+  const rightSide = headerRow.querySelector(".flex.gap-3");
+  if (rightSide) {
+    rightSide.prepend(btn);
+  } else {
+    headerRow.appendChild(btn);
+  }
+
+  syncUiModeLabel();
+}
+
+function syncUiModeLabel() {
+  const label = document.getElementById("ui-mode-label");
+  if (!label) return;
+  label.textContent = document.body.classList.contains("compact-ui") ? "Mobile" : "Desktop";
+}
+
 // ---------- install ----------
 export function installLegacyApp() {
   document.getElementById("btn-login")?.addEventListener("click", () => window.handleAuth("login"));
   document.getElementById("btn-signup")?.addEventListener("click", () => window.handleAuth("signup"));
+
+  // default: compacto (melhor no celular)
+  document.body.classList.add("compact-ui");
 
   firebaseApi.onAuthStateChanged(auth, async (user) => {
     const authDiv = document.getElementById("auth-section");
@@ -88,6 +123,8 @@ export function installLegacyApp() {
       currentUserId = user.uid;
       authDiv.classList.add("hidden");
       appDiv.classList.remove("hidden");
+
+      ensureUiToggleButton();
 
       await window.initialize12Servers(user.uid);
       window.startListening(user.uid);
@@ -137,6 +174,11 @@ window.toggleDarkMode = () => {
   const isDark = document.body.classList.contains("dark-mode");
   icon?.setAttribute("data-lucide", isDark ? "moon" : "sun");
   createIcons({ icons });
+};
+
+window.toggleUiMode = () => {
+  document.body.classList.toggle("compact-ui");
+  syncUiModeLabel();
 };
 
 window.switchView = (v) => {
@@ -260,11 +302,6 @@ function calcRevendaTotals(serversMap: Record<string, RevendaServerRow>) {
   return { totalPaga, totalCasinhas, totalCustoServers, lucro };
 }
 
-/**
- * FIX: layout sem sobreposição
- * - usa grid: nome ocupa o resto, inputs ficam numa coluna fixa (2 inputs)
- * - em telas pequenas vira 1 coluna (nome em cima, inputs embaixo)
- */
 function renderRevendaServerGridFromServers(existing?: Record<string, RevendaServerRow>) {
   const grid = document.getElementById("rev-server-grid");
   if (!grid) return;
@@ -279,7 +316,7 @@ function renderRevendaServerGridFromServers(existing?: Record<string, RevendaSer
     row.className = "rounded-2xl border border-slate-200 p-4 bg-white";
 
     row.innerHTML = `
-      <div class="grid grid-cols-1 md:grid-cols-[1fr_240px] gap-4 items-center">
+      <div class="grid grid-cols-1 md:grid-cols-[1fr_220px] gap-4 items-center">
         <div class="min-w-0">
           <div class="font-black uppercase text-slate-700 truncate">${srvName}</div>
           <div class="text-[11px] font-bold text-slate-400 uppercase tracking-widest mt-1">
@@ -291,7 +328,8 @@ function renderRevendaServerGridFromServers(existing?: Record<string, RevendaSer
           <div>
             <label class="text-[10px] font-black uppercase text-slate-400 block mb-1">QTD</label>
             <input
-              class="input-box !p-3 !rounded-xl text-center"
+              class="mini-input"
+              type="number"
               inputmode="numeric"
               data-srv="${srvName}"
               data-type="count"
@@ -302,7 +340,7 @@ function renderRevendaServerGridFromServers(existing?: Record<string, RevendaSer
           <div>
             <label class="text-[10px] font-black uppercase text-slate-400 block mb-1">R$ / cliente</label>
             <input
-              class="input-box !p-3 !rounded-xl text-center"
+              class="mini-input"
               inputmode="decimal"
               data-srv="${srvName}"
               data-type="price"
