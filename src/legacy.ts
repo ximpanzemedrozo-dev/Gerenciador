@@ -28,7 +28,7 @@ window.switchTheme = (theme: string) => {
   localStorage.setItem('gi-theme', theme);
 };
 
-// ---------- Motor de Importação (Regras Específicas) ----------
+// ---------- Motor de Importação ----------
 function parseSmartBlock(text: string, forcedServer: string): Partial<Client> | null {
   const idMatch = text.match(/\b(\d{9})\b/);
   if (!idMatch) return null;
@@ -41,26 +41,22 @@ function parseSmartBlock(text: string, forcedServer: string): Partial<Client> | 
     painel: forcedServer || 'Outros'
   };
 
-  // Se não foi forçado um servidor, tenta detectar
   if (!forcedServer) {
     if (text.toUpperCase().includes('STAR PLAY')) result.painel = 'Starplay';
     else if (text.toUpperCase().includes('VISION')) result.painel = 'Vision';
   }
 
-  // Vencimento (YYYY-MM-DD para o input date)
   const dateMatch = text.match(/(\d{2})\/(\d{2})\/(\d{4})/);
   if (dateMatch) {
     const [, d, m, y] = dateMatch;
     result.venc = `${y}-${m}-${d}`;
   }
 
-  // Plano
   const priceMatch = text.match(/Plano:\s*R\$\s*([\d,.]+)/i);
   if (priceMatch) {
     result.plano = parseFloat(priceMatch[1].replace('.', '').replace(',', '.'));
   }
 
-  // Nome (pega o que vem antes do hífen)
   const lines = text.split('\n').map(l => l.trim()).filter(Boolean);
   lines.forEach(line => {
     if (line.includes(' - ') && !line.includes('Criado em') && !line.includes('STAR PLAY')) {
@@ -160,18 +156,18 @@ function renderClientsList() {
     
     div.innerHTML = `
       <div class="flex items-start gap-3">
-        ${bulkMode ? `<div class="w-5 h-5 rounded-full border-2 flex items-center justify-center \${isSelected ? 'bg-sky-500 border-sky-500' : 'border-slate-300'}"><i data-lucide="check" class="w-3 h-3 text-white"></i></div>` : ''}
+        ${bulkMode ? `<div class="w-5 h-5 rounded-full border-2 flex items-center justify-center ${isSelected ? 'bg-sky-500 border-sky-500' : 'border-slate-300'}"><i data-lucide="check" class="w-3 h-3 text-white"></i></div>` : ''}
         <div class="flex-1 min-w-0">
-          <div class="font-black uppercase truncate text-slate-800 dark:text-slate-100">\${c.nome || 'Sem Nome'}</div>
-          <div class="text-[10px] font-bold text-slate-400 mt-1 uppercase">\${c.painel || '-'} • ID: \${c.idExt || '-'} • \${c.status || 'Ativo'}</div>
-          <div class="text-[11px] font-bold text-slate-500 mt-2">VENC: \${c.venc ? c.venc.split('-').reverse().join('/') : '-'} • R$ \${c.plano?.toFixed(2)}</div>
+          <div class="font-black uppercase truncate text-slate-800 dark:text-slate-100">${c.nome || 'Sem Nome'}</div>
+          <div class="text-[10px] font-bold text-slate-400 mt-1 uppercase">${c.painel || '-'} • ID: ${c.idExt || '-'} • ${c.status || 'Ativo'}</div>
+          <div class="text-[11px] font-bold text-slate-500 mt-2">VENC: ${c.venc ? c.venc.split('-').reverse().join('/') : '-'} • R$ ${c.plano?.toFixed(2)}</div>
         </div>
-        \${!bulkMode ? \`
+        ${!bulkMode ? `
           <div class="flex flex-col gap-2">
-            <button onclick="window.openEditClient('\${c.id}')" class="text-sky-500 p-1"><i data-lucide="edit-3" class="w-4 h-4"></i></button>
-            <button onclick="window.deleteClient('\${c.id}')" class="text-red-400 p-1"><i data-lucide="trash-2" class="w-4 h-4"></i></button>
+            <button onclick="window.openEditClient('${c.id}')" class="text-sky-500 p-1"><i data-lucide="edit-3" class="w-4 h-4"></i></button>
+            <button onclick="window.deleteClient('${c.id}')" class="text-red-400 p-1"><i data-lucide="trash-2" class="w-4 h-4"></i></button>
           </div>
-        \` : ''}
+        ` : ''}
       </div>
     `;
 
@@ -216,7 +212,7 @@ window.importClientsFromText = async () => {
         ...data, createdAt: new Date().toISOString()
       });
     }
-    if (bar) bar.style.width = \`\${((i + 1) / blocks.length) * 100}%\`;
+    if (bar) bar.style.width = `${((i + 1) / blocks.length) * 100}%`;
   }
   alert("Finalizado!");
   window.toggleModal("import-modal");
