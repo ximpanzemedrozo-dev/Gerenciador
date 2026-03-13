@@ -39,7 +39,7 @@ export const appHtml = `
         </h1>
 
         <div class="flex gap-3">
-          <button onclick="toggleDarkMode()" class="p-3 rounded-2xl bg-slate-50 dark:bg-slate-800 text-slate-400">
+          <button onclick="toggleDarkMode()" class="p-3 rounded-2xl bg-slate-50 dark:bg-slate-800 text-slate-400" title="Tema">
             <i id="theme-icon" data-lucide="sun"></i>
           </button>
 
@@ -121,8 +121,11 @@ export const appHtml = `
   </div>
 
   <!-- MODAL: REVENDAS (NOVO) -->
-  <div id="revenda-modal" class="modal-overlay">
-    <div class="bg-white dark:bg-slate-900 w-full max-w-3xl rounded-[2.5rem] p-8 shadow-3xl max-h-[90vh] overflow-y-auto">
+  <div id="revenda-modal" class="modal-overlay" onclick="toggleModal('revenda-modal')">
+    <div
+      class="bg-white dark:bg-slate-900 w-full max-w-3xl rounded-[2.5rem] p-8 shadow-3xl max-h-[90vh] overflow-y-auto"
+      onclick="event.stopPropagation()"
+    >
       <div class="flex items-start justify-between gap-4">
         <div>
           <h2 id="revenda-modal-title" class="text-2xl font-black italic uppercase text-sky-600 tracking-tighter">Nova Revenda</h2>
