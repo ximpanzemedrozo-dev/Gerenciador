@@ -65,6 +65,14 @@ export const appHtml = `
           </div>
 
           <div class="flex gap-2">
+            <button
+              id="btn-bulk"
+              onclick="toggleBulkSelectClients()"
+              class="bg-slate-200 text-slate-700 px-4 py-3 rounded-2xl font-black text-xs uppercase"
+            >
+              Selecionar
+            </button>
+
             <button onclick="openImportClients()" class="bg-slate-900 text-white px-4 py-3 rounded-2xl font-black text-xs uppercase">
               Importar
             </button>
@@ -114,6 +122,29 @@ export const appHtml = `
         </div>
 
         <div id="clients-list" class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4"></div>
+
+        <!-- BULK BAR -->
+        <div id="clients-bulkbar" class="hidden fixed bottom-20 left-0 right-0 px-4 z-[60]">
+          <div class="max-w-7xl mx-auto rounded-2xl border border-slate-200 bg-white shadow-xl p-3 flex flex-col gap-2 md:flex-row md:items-center md:justify-between">
+            <div class="text-xs font-black uppercase tracking-widest text-slate-500">
+              Selecionados: <span id="clients-bulk-count" class="text-slate-900">0</span>
+            </div>
+
+            <div class="flex gap-2">
+              <button onclick="bulkDeleteSelectedClients()" class="bg-red-600 text-white px-4 py-3 rounded-2xl font-black text-xs uppercase">
+                Apagar Selecionados
+              </button>
+
+              <button onclick="bulkDeleteFilteredClients()" class="bg-red-50 text-red-700 border border-red-200 px-4 py-3 rounded-2xl font-black text-xs uppercase">
+                Apagar Filtrados
+              </button>
+
+              <button onclick="toggleBulkSelectClients(false)" class="bg-slate-200 text-slate-700 px-4 py-3 rounded-2xl font-black text-xs uppercase">
+                Cancelar
+              </button>
+            </div>
+          </div>
+        </div>
       </section>
 
       <!-- CASINHAS -->
