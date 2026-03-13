@@ -58,9 +58,9 @@ export const appHtml = `
         <div class="rounded-2xl border border-slate-200 bg-white/95 backdrop-blur-md p-4">
           <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
             <div>
-              <div class="text-[10px] font-black uppercase tracking-[0.3em] text-slate-400">Custo casinhas (Starplay/Vision)</div>
-              <div id="top-total-casinhas" class="text-2xl font-black text-rose-500 mt-1">R$ 0,00</div>
-            </div>
+  <div class="text-[10px] font-black uppercase tracking-[0.3em] text-slate-400">Lucro real (Total - casinhas)</div>
+  <div id="top-real-profit" class="text-3xl font-black text-emerald-600 mt-1">R$ 0,00</div>
+</div>
             <div>
               <div class="text-[10px] font-black uppercase tracking-[0.3em] text-slate-400">Total clientes (soma planos)</div>
               <div id="top-total-plans" class="text-2xl font-black text-slate-900 mt-1">R$ 0,00</div>
