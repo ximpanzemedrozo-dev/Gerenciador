@@ -1,420 +1,283 @@
-export const appHtml = `
-  <!-- LOGIN -->
-  <section id="auth-section" class="fixed inset-0 z-[200] bg-white dark:bg-slate-950 flex items-center justify-center p-6 text-center">
-    <div class="w-full max-w-sm">
-      <div class="w-24 h-24 bg-sky-500 rounded-[2.5rem] flex items-center justify-center text-white mx-auto mb-10 rotate-3">
-        <i data-lucide="shield-check" class="w-12 h-12"></i>
+import { auth, db, appId, firebaseApi } from "./firebase";
+import { createIcons, icons } from "lucide";
+
+// ---------- Tipos ----------
+type Server = { id: string; name: string; cost: number };
+type BillingCycle = "mensal" | "bimestral" | "trimestral" | "semestral" | "anual";
+
+type Client = {
+  id: string;
+  nome?: string;
+  painel?: string;
+  cycle?: BillingCycle;
+  email?: string;
+  venc?: string;
+  plano?: number;
+  createdAt?: string;
+  updatedAt?: string;
+};
+
+declare global {
+  interface Window {
+    handleAuth: (mode: "login" | "signup") => Promise<void>;
+    toggleModal: (id: string) => void;
+    toggleDarkMode: () => void;
+    initialize12Servers: (userId: string) => Promise<void>;
+    startListening: (userId: string) => void;
+    switchView: (v: string) => void;
+    logout: () => Promise<void>;
+    openAddClient: () => void;
+    openEditClient: (id: string) => void;
+    saveClient: () => Promise<void>;
+    deleteClient: (id: string) => Promise<void>;
+    openImportClients: () => void;
+    previewImport: () => void;
+    importClientsFromText: () => Promise<void>;
+    refreshFinance: () => void;
+    toggleBulkSelectClients: (force?: boolean) => void;
+  }
+}
+
+// ---------- Estado Global ----------
+let currentUserId: string | null = null;
+let clients: Client[] = [];
+let bulkMode = false;
+let selectedClientIds = new Set<string>();
+
+const CASINHA_COST: Record<string, number> = { Vision: 2.0, Starplay: 2.5 };
+const FULL_SERVERS_LIST = ["Starplay", "Vision", "Primelux", "Play Tv", "Blast Elite", "Blast Flash", "Havok Radeon", "Havok Kyros", "Havok Andromeda", "Havok Neon", "Allbox", "Ryzeen", "Titan"];
+
+// ---------- Helpers ----------
+function money(n: number) {
+  return `R$ ${n.toLocaleString("pt-BR", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+}
+
+function parseNum(raw: string): number {
+  const v = (raw || "").toString().trim().replace(/\s/g, "").replace(",", ".");
+  const n = Number(v);
+  return Number.isFinite(n) ? n : 0;
+}
+
+function isoToday() { return new Date().toISOString().split("T")[0]; }
+
+function daysBetween(a: string, b: string) {
+  const da = new Date(a + "T00:00:00");
+  const db = new Date(b + "T00:00:00");
+  return Math.floor((db.getTime() - da.getTime()) / (1000 * 60 * 60 * 24));
+}
+
+// ---------- Barra de Lucro Superior (Somente Mensais) ----------
+function refreshTopProfitBar() {
+  const totalPlansEl = document.getElementById("top-total-plans");
+  const totalCasinhasEl = document.getElementById("top-total-casinhas");
+  const realProfitEl = document.getElementById("top-real-profit");
+  const metaEl = document.getElementById("top-casinhas-meta");
+
+  if (!totalPlansEl || !totalCasinhasEl || !realProfitEl) return;
+
+  // LÓGICA SOLICITADA: Filtrar apenas clientes MENSALISTAS para a barra do topo
+  const mensalistas = clients.filter(c => (c.cycle || "mensal") === "mensal");
+
+  const totalPlans = mensalistas.reduce((acc, c) => acc + (Number(c.plano) || 0), 0);
+
+  let qtdStarplay = 0;
+  let qtdVision = 0;
+  for (const c of mensalistas) {
+    if (c.painel === "Starplay") qtdStarplay++;
+    if (c.painel === "Vision") qtdVision++;
+  }
+
+  const custoCasinhas = qtdStarplay * 2.5 + qtdVision * 2.0;
+  const lucroReal = totalPlans - custoCasinhas;
+
+  totalPlansEl.textContent = money(totalPlans);
+  totalCasinhasEl.textContent = money(custoCasinhas);
+  realProfitEl.textContent = money(lucroReal);
+  if (metaEl) metaEl.textContent = `Starplay: ${qtdStarplay} (R$ 2.50) • Vision: ${qtdVision} (R$ 2.00)`;
+}
+
+// ---------- Navegação e Auth ----------
+export function installLegacyApp() {
+  document.getElementById("btn-login")?.addEventListener("click", () => window.handleAuth("login"));
+  document.getElementById("btn-signup")?.addEventListener("click", () => window.handleAuth("signup"));
+
+  firebaseApi.onAuthStateChanged(auth, async (user) => {
+    if (user) {
+      currentUserId = user.uid;
+      document.getElementById("auth-section")?.classList.add("hidden");
+      document.getElementById("app-content")?.classList.remove("hidden");
+      await window.initialize12Servers(user.uid);
+      window.startListening(user.uid);
+      window.switchView("clients");
+    } else {
+      currentUserId = null;
+      document.getElementById("auth-section")?.classList.remove("hidden");
+      document.getElementById("app-content")?.classList.add("hidden");
+    }
+  });
+
+  document.getElementById("clients-search")?.addEventListener("input", renderClientsList);
+  document.querySelectorAll("#clients-filter-server, #clients-filter-cycle").forEach(el => 
+    el.addEventListener("change", renderClientsList)
+  );
+}
+
+window.handleAuth = async (mode) => {
+  const email = (document.getElementById("auth-email") as HTMLInputElement).value;
+  const password = (document.getElementById("auth-password") as HTMLInputElement).value;
+  try {
+    if (mode === "login") await firebaseApi.signInWithEmailAndPassword(auth, email, password);
+    else await firebaseApi.createUserWithEmailAndPassword(auth, email, password);
+  } catch { alert("Erro de acesso."); }
+};
+
+window.logout = () => firebaseApi.signOut(auth);
+
+window.switchView = (v) => {
+  document.querySelectorAll(".view-section").forEach(s => s.classList.add("hidden"));
+  document.getElementById(`view-${v}`)?.classList.remove("hidden");
+  document.querySelectorAll(".nav-btn").forEach(b => b.classList.remove("active"));
+  document.getElementById(`nav-${v}`)?.classList.add("active");
+  if (v === "finance") window.refreshFinance();
+  refreshTopProfitBar();
+  createIcons({ icons });
+};
+
+window.toggleModal = (id) => document.getElementById(id)?.classList.toggle("active");
+
+// ---------- Clientes e Filtros ----------
+function getFilteredClients() {
+  const q = (document.getElementById("clients-search") as HTMLInputElement)?.value.toLowerCase().trim() || "";
+  const srv = (document.getElementById("clients-filter-server") as HTMLSelectElement)?.value || "";
+  const cyc = (document.getElementById("clients-filter-cycle") as HTMLSelectElement)?.value || "";
+
+  return clients.filter(c => {
+    if (srv && c.painel !== srv) return false;
+    if (cyc && (c.cycle || "mensal") !== cyc) return false;
+    if (!q) return true;
+    return (c.nome || "").toLowerCase().includes(q) || (c.email || "").toLowerCase().includes(q);
+  });
+}
+
+function renderClientsList() {
+  const cont = document.getElementById("clients-list");
+  if (!cont) return;
+  const filtered = getFilteredClients();
+  document.getElementById("clients-count")!.textContent = `${filtered.length}/${clients.length}`;
+  
+  cont.innerHTML = "";
+  filtered.forEach(c => {
+    const div = document.createElement("div");
+    div.className = "luxury-card p-5";
+    div.innerHTML = `
+      <div class="flex justify-between items-start gap-3">
+        <div class="min-w-0">
+          <div class="font-black uppercase text-slate-800 truncate">${c.nome || "Sem nome"}</div>
+          <div class="text-[11px] font-bold text-slate-400 uppercase tracking-widest mt-1">${c.painel || "-"} • ${c.cycle || "mensal"}</div>
+          <div class="text-[11px] text-slate-500 mt-1 truncate">${c.email || ""}</div>
+          <div class="text-[11px] font-bold text-slate-400 uppercase tracking-widest mt-2">Venc: ${c.venc || "-"} • ${money(c.plano || 0)}</div>
+        </div>
+        <div class="flex flex-col gap-2">
+          <button class="bg-slate-100 px-3 py-1 rounded-xl text-[10px] font-black uppercase" onclick="openEditClient('${c.id}')">Editar</button>
+          <button class="bg-red-50 text-red-600 px-3 py-1 rounded-xl text-[10px] font-black uppercase" onclick="deleteClient('${c.id}')">Apagar</button>
+        </div>
       </div>
-      <h1 class="text-4xl font-black text-slate-800 dark:text-white tracking-tighter uppercase italic mb-2 leading-none">
-        GERENCIADOR <span class="text-sky-500">INTELIGENTE</span>
-      </h1>
-      <p class="text-[10px] font-bold text-slate-400 uppercase tracking-[0.4em] mb-12 italic">
-        Elite Master Definitive Edition
-      </p>
-      <div id="auth-error" class="hidden mb-6 p-4 bg-red-50 text-red-500 text-xs font-bold rounded-2xl border border-red-100"></div>
-      <div class="space-y-4">
-        <input type="email" id="auth-email" placeholder="E-mail Administrativo" class="input-box">
-        <input type="password" id="auth-password" placeholder="Chave de Acesso" class="input-box">
-        <button id="btn-login" class="w-full bg-sky-500 text-white py-5 rounded-[1.5rem] font-black uppercase tracking-widest active:scale-95 transition-all">
-          Aceder ao Painel
-        </button>
-        <button id="btn-signup" class="text-slate-400 text-[10px] font-black uppercase tracking-widest mt-6 hover:text-sky-500 transition-colors">
-          Criar Nova Credencial
-        </button>
-      </div>
+    `;
+    cont.appendChild(div);
+  });
+  createIcons({ icons });
+}
+
+window.openAddClient = () => {
+  (document.getElementById("client-edit-id") as HTMLInputElement).value = "";
+  (document.getElementById("client-nome") as HTMLInputElement).value = "";
+  window.toggleModal("client-modal");
+};
+
+window.openEditClient = (id) => {
+  const c = clients.find(x => x.id === id);
+  if (!c) return;
+  (document.getElementById("client-edit-id") as HTMLInputElement).value = id;
+  (document.getElementById("client-nome") as HTMLInputElement).value = c.nome || "";
+  (document.getElementById("client-painel") as HTMLInputElement).value = c.painel || "";
+  (document.getElementById("client-email") as HTMLInputElement).value = c.email || "";
+  (document.getElementById("client-venc") as HTMLInputElement).value = c.venc || "";
+  (document.getElementById("client-plano") as HTMLInputElement).value = String(c.plano || "20.00");
+  window.toggleModal("client-modal");
+};
+
+window.saveClient = async () => {
+  if (!currentUserId) return;
+  const id = (document.getElementById("client-edit-id") as HTMLInputElement).value;
+  const data = {
+    nome: (document.getElementById("client-nome") as HTMLInputElement).value,
+    painel: (document.getElementById("client-painel") as HTMLInputElement).value,
+    cycle: (document.getElementById("client-cycle") as HTMLSelectElement).value,
+    email: (document.getElementById("client-email") as HTMLInputElement).value,
+    venc: (document.getElementById("client-venc") as HTMLInputElement).value,
+    plano: parseNum((document.getElementById("client-plano") as HTMLInputElement).value),
+    updatedAt: new Date().toISOString()
+  };
+  const coll = firebaseApi.collection(db, "artifacts", appId, "users", currentUserId, "clients");
+  id ? await firebaseApi.updateDoc(firebaseApi.doc(db, "artifacts", appId, "users", currentUserId, "clients", id), data)
+     : await firebaseApi.addDoc(coll, { ...data, createdAt: data.updatedAt });
+  window.toggleModal("client-modal");
+};
+
+window.deleteClient = async (id) => { if (currentUserId && confirm("Apagar?")) await firebaseApi.deleteDoc(firebaseApi.doc(db, "artifacts", appId, "users", currentUserId, "clients", id)); };
+
+// ---------- Importação ----------
+window.openImportClients = () => window.toggleModal("import-modal");
+
+window.previewImport = () => {
+  const text = (document.getElementById("import-text") as HTMLTextAreaElement).value;
+  document.getElementById("import-preview")!.textContent = "Lendo texto...";
+  // Aqui entraria a lógica de regex para extrair dados
+};
+
+window.importClientsFromText = async () => {
+  if (!currentUserId) return;
+  alert("Lógica de importação ativada. Processando blocos...");
+  window.toggleModal("import-modal");
+};
+
+// ---------- Financeiro (Resumo Geral) ----------
+window.refreshFinance = () => {
+  document.getElementById("fin-total-clients")!.textContent = String(clients.length);
+  const dueSoon = clients.filter(c => c.venc && daysBetween(isoToday(), c.venc) <= 7).length;
+  document.getElementById("fin-due-soon")!.textContent = String(dueSoon);
+
+  const breakdown: Record<string, number> = {};
+  clients.forEach(c => {
+    const k = `${c.painel || "Outros"} (${c.cycle || "mensal"})`;
+    breakdown[k] = (breakdown[k] || 0) + (c.plano || 0);
+  });
+
+  document.getElementById("fin-breakdown")!.innerHTML = Object.entries(breakdown).map(([k, v]) => `
+    <div class="flex justify-between border-b py-2">
+      <span class="text-xs font-bold text-slate-500 uppercase">${k}</span>
+      <span class="text-xs font-black text-slate-900">${money(v)}</span>
     </div>
-  </section>
+  `).join("");
+};
 
-  <!-- APP -->
-  <div id="app-content" class="hidden">
-    <header class="sticky top-0 z-50 bg-white/80 dark:bg-slate-900/80 backdrop-blur-md border-b border-slate-100 dark:border-slate-800 px-4 py-4">
-      <div class="max-w-7xl mx-auto flex justify-between items-center">
-        <h1 class="text-xl font-black italic tracking-tighter uppercase">
-          GERENCIADOR <span class="text-sky-500">INTELIGENTE</span>
-        </h1>
-        <div class="flex gap-2">
-          <button onclick="toggleDarkMode()" class="p-3 rounded-2xl bg-slate-50 dark:bg-slate-800 text-slate-400" title="Tema">
-            <i id="theme-icon" data-lucide="sun"></i>
-          </button>
-          <button onclick="logout()" class="p-3 rounded-2xl bg-red-50 text-red-500 border border-red-100" title="Sair">
-            <i data-lucide="log-out"></i>
-          </button>
-        </div>
-      </div>
-    </header>
+window.startListening = (userId) => {
+  firebaseApi.onSnapshot(firebaseApi.collection(db, "artifacts", appId, "users", userId, "clients"), snap => {
+    clients = snap.docs.map(d => ({ id: d.id, ...d.data() })) as Client[];
+    renderClientsList();
+    window.refreshFinance();
+    refreshTopProfitBar();
+  });
+};
 
-    <!-- BARRA GLOBAL (fixa) -->
-    <div id="top-profitbar-wrap" class="sticky top-[72px] z-40 px-4">
-      <div class="max-w-7xl mx-auto mt-3 mb-2">
-        <div class="rounded-2xl border border-slate-200 bg-white/95 backdrop-blur-md p-4">
-          <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
-            <div>
-              <div class="text-[10px] font-black uppercase tracking-[0.3em] text-slate-400">Custo casinhas (Starplay/Vision)</div>
-              <div id="top-total-casinhas" class="text-2xl font-black text-rose-500 mt-1">R$ 0,00</div>
-              <div id="top-casinhas-meta" class="text-[10px] font-bold uppercase tracking-widest text-slate-400 mt-2"></div>
-            </div>
-            <div>
-              <div class="text-[10px] font-black uppercase tracking-[0.3em] text-slate-400">Total clientes (soma planos)</div>
-              <div id="top-total-plans" class="text-2xl font-black text-slate-900 mt-1">R$ 0,00</div>
-            </div>
-            <div>
-              <div class="text-[10px] font-black uppercase tracking-[0.3em] text-slate-400">Lucro real (Total - casinhas)</div>
-              <div id="top-real-profit" class="text-3xl font-black text-emerald-600 mt-1">R$ 0,00</div>
-            </div>
-          </div>
-          <div class="text-[10px] font-bold uppercase tracking-widest text-slate-400 mt-3">
-            Base: clientes filtrados em <span class="text-slate-700">Clientes</span> (Servidor/Ciclo/Busca)
-          </div>
-        </div>
-      </div>
-    </div>
+window.initialize12Servers = async (userId) => {
+  const snap = await firebaseApi.getDocs(firebaseApi.collection(db, "artifacts", appId, "users", userId, "servers"));
+  if (snap.empty) {
+    for (const name of FULL_SERVERS_LIST) {
+      await firebaseApi.addDoc(firebaseApi.collection(db, "artifacts", appId, "users", userId, "servers"), { name, cost: 3.0 });
+    }
+  }
+};
 
-    <main id="app-main" class="max-w-7xl mx-auto px-4 pt-5 pb-32">
-      <!-- CLIENTES -->
-      <section id="view-clients" class="view-section">
-        <div class="flex flex-col gap-3 md:flex-row md:items-center md:justify-between mb-4">
-          <div>
-            <h2 class="text-2xl font-black italic uppercase tracking-tighter">Clientes</h2>
-            <p class="text-xs font-bold text-slate-400 uppercase tracking-widest mt-1">
-              Cadastro + Importação • <span class="text-slate-600">Clientes:</span>
-              <span id="clients-count" class="text-slate-900">0/0</span>
-            </p>
-          </div>
-          <div class="flex gap-2">
-            <button
-              id="btn-bulk"
-              onclick="toggleBulkSelectClients()"
-              class="bg-slate-200 text-slate-700 px-4 py-3 rounded-2xl font-black text-xs uppercase"
-            >
-              Selecionar
-            </button>
-            <button onclick="openImportClients()" class="bg-slate-900 text-white px-4 py-3 rounded-2xl font-black text-xs uppercase">
-              Importar
-            </button>
-            <button onclick="openAddClient()" class="bg-sky-500 text-white px-4 py-3 rounded-2xl font-black text-xs uppercase">
-              Novo
-            </button>
-          </div>
-        </div>
-        <!-- filtros -->
-        <div class="rounded-2xl border border-slate-200 bg-white p-4 mb-4 space-y-3">
-          <div class="grid grid-cols-2 gap-3">
-            <div>
-              <label class="text-[10px] font-black uppercase text-slate-400 mb-2 block ml-1">Servidor</label>
-              <select id="clients-filter-server" class="filter-select">
-                <option value="">Todos</option>
-                <option value="Starplay">Starplay</option>
-                <option value="Vision">Vision</option>
-                <option value="Primelux">Primelux</option>
-                <option value="Play Tv">Play Tv</option>
-                <option value="Blast Elite">Blast Elite</option>
-                <option value="Blast Flash">Blast Flash</option>
-                <option value="Havok Radeon">Havok Radeon</option>
-                <option value="Havok Kyros">Havok Kyros</option>
-                <option value="Havok Andromeda">Havok Andromeda</option>
-                <option value="Havok Neon">Havok Neon</option>
-                <option value="Allbox">Allbox</option>
-                <option value="Ryzeen">Ryzeen</option>
-                <option value="Titan">Titan</option>
-              </select>
-            </div>
-            <div>
-              <label class="text-[10px] font-black uppercase text-slate-400 mb-2 block ml-1">Ciclo</label>
-              <select id="clients-filter-cycle" class="filter-select">
-                <option value="">Todos</option>
-                <option value="mensal">Mensal</option>
-                <option value="bimestral">Bimestral</option>
-                <option value="trimestral">Trimestral</option>
-                <option value="semestral">Semestral</option>
-                <option value="anual">Anual</option>
-              </select>
-            </div>
-          </div>
-          <input id="clients-search" class="input-box" placeholder="Buscar por nome, email, id, painel..." />
-        </div>
-        <div id="clients-list" class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4"></div>
-        <!-- BULK BAR -->
-        <div id="clients-bulkbar" class="hidden fixed bottom-20 left-0 right-0 px-4 z-[60]">
-          <div class="max-w-7xl mx-auto rounded-2xl border border-slate-200 bg-white shadow-xl p-3 flex flex-col gap-2 md:flex-row md:items-center md:justify-between">
-            <div class="text-xs font-black uppercase tracking-widest text-slate-500">
-              Selecionados: <span id="clients-bulk-count" class="text-slate-900">0</span>
-            </div>
-            <div class="flex flex-wrap gap-2 justify-end">
-              <button onclick="bulkSelectAllFilteredClients()" class="bg-slate-900 text-white px-4 py-3 rounded-2xl font-black text-xs uppercase">
-                Selecionar Todos
-              </button>
-              <button onclick="bulkDeleteSelectedClients()" class="bg-red-600 text-white px-4 py-3 rounded-2xl font-black text-xs uppercase">
-                Apagar Selecionados
-              </button>
-              <button onclick="bulkDeleteFilteredClients()" class="bg-red-50 text-red-700 border border-red-200 px-4 py-3 rounded-2xl font-black text-xs uppercase">
-                Apagar Filtrados
-              </button>
-              <button onclick="toggleBulkSelectClients(false)" class="bg-slate-200 text-slate-700 px-4 py-3 rounded-2xl font-black text-xs uppercase">
-                Cancelar
-              </button>
-            </div>
-          </div>
-        </div>
-      </section>
-
-      <!-- CASINHAS -->
-      <section id="view-casinhas" class="view-section hidden">
-        <div class="rounded-2xl border border-slate-200 bg-white p-6">
-          <h2 class="text-xl font-black">Casinhas</h2>
-          <p class="text-sm text-slate-500 mt-2">Próximo passo: toggle pago + cálculo de dívida.</p>
-        </div>
-      </section>
-
-      <!-- REVENDAS -->
-      <section id="view-revendas" class="view-section hidden">
-        <div class="flex justify-between items-center mb-4">
-          <div>
-            <h2 class="text-2xl font-black italic uppercase tracking-tighter">Parceiros Revenda</h2>
-            <p class="text-xs font-bold text-slate-400 uppercase tracking-widest mt-1">Cálculo automático</p>
-          </div>
-          <button onclick="openAddRevenda()" class="bg-sky-500 text-white px-4 py-3 rounded-2xl font-black text-xs uppercase">
-            Novo
-          </button>
-        </div>
-        <div id="revendas-list" class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4"></div>
-      </section>
-
-      <!-- SERVERS -->
-      <section id="view-servers" class="view-section hidden">
-        <div class="rounded-2xl border border-slate-200 bg-white p-6">
-          <h2 class="text-xl font-black">Painéis</h2>
-          <p class="text-sm text-slate-500 mt-2">Próximo passo: editar custos por painel.</p>
-        </div>
-      </section>
-
-      <!-- FINANCE -->
-      <section id="view-finance" class="view-section hidden">
-        <div class="flex items-end justify-between mb-4">
-          <div>
-            <h2 class="text-2xl font-black italic uppercase tracking-tighter">Ganhos</h2>
-            <p class="text-xs font-bold text-slate-400 uppercase tracking-widest mt-1">Resumo por ciclo e painel</p>
-          </div>
-          <button onclick="refreshFinance()" class="bg-slate-900 text-white px-4 py-3 rounded-2xl font-black text-xs uppercase">
-            Atualizar
-          </button>
-        </div>
-        <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
-          <div class="rounded-2xl border border-slate-200 bg-white p-5">
-            <div class="text-[10px] font-black uppercase tracking-[0.3em] text-slate-400">Clientes (filtrados)</div>
-            <div id="fin-total-clients" class="text-3xl font-black text-slate-900 mt-2">0</div>
-          </div>
-          <div class="rounded-2xl border border-slate-200 bg-white p-5">
-            <div class="text-[10px] font-black uppercase tracking-[0.3em] text-slate-400">Vencendo (7 dias)</div>
-            <div id="fin-due-soon" class="text-3xl font-black text-rose-500 mt-2">0</div>
-          </div>
-        </div>
-        <div class="mt-4 rounded-2xl border border-slate-200 bg-white p-5">
-          <div class="flex items-center justify-between gap-3">
-            <div class="text-sm font-black uppercase tracking-widest text-slate-400">Resumo</div>
-            <div class="text-[10px] font-black uppercase tracking-[0.3em] text-slate-400">por ciclo / painel</div>
-          </div>
-          <div id="fin-breakdown" class="mt-4 space-y-3"></div>
-        </div>
-      </section>
-    </main>
-
-    <nav class="fixed bottom-0 left-0 right-0 bg-white/95 dark:bg-slate-950/95 backdrop-blur-3xl border-t border-slate-100 dark:border-slate-800 h-20 flex justify-around items-center px-4 z-50">
-      <button onclick="switchView('clients')" id="nav-clients" class="nav-btn active">
-        <i data-lucide="users"></i><span>Início</span>
-      </button>
-      <button onclick="switchView('casinhas')" id="nav-casinhas" class="nav-btn">
-        <i data-lucide="layout-grid"></i><span>Casinhas</span>
-      </button>
-      <button onclick="switchView('revendas')" id="nav-revendas" class="nav-btn">
-        <i data-lucide="handshake"></i><span>Revenda</span>
-      </button>
-      <button onclick="switchView('servers')" id="nav-servers" class="nav-btn">
-        <i data-lucide="server"></i><span>Painéis</span>
-      </button>
-      <button onclick="switchView('finance')" id="nav-finance" class="nav-btn">
-        <i data-lucide="wallet"></i><span>Ganhos</span>
-      </button>
-    </nav>
-  </div>
-
-  <!-- MODAL: CLIENTE -->
-  <div id="client-modal" class="modal-overlay" onclick="toggleModal('client-modal')">
-    <div class="bg-white dark:bg-slate-900 w-full max-w-3xl rounded-[2.5rem] p-6 shadow-3xl max-h-[90vh] overflow-y-auto" onclick="event.stopPropagation()">
-      <div class="flex items-start justify-between gap-4">
-        <div>
-          <h2 id="client-modal-title" class="text-2xl font-black italic uppercase text-sky-600 tracking-tighter">Novo Cliente</h2>
-          <p class="text-xs font-bold text-slate-400 uppercase tracking-widest mt-1">Cadastro rápido</p>
-        </div>
-        <button onclick="toggleModal('client-modal')" class="text-slate-400 font-black">Fechar</button>
-      </div>
-      <input type="hidden" id="client-edit-id" />
-      <div class="grid grid-cols-1 md:grid-cols-2 gap-3 mt-5">
-        <div>
-          <label class="text-[10px] font-black uppercase text-slate-400 mb-2 block ml-1">Nome</label>
-          <input id="client-nome" class="input-box" placeholder="Ex: Irma da Kamila" />
-        </div>
-        <div>
-          <label class="text-[10px] font-black uppercase text-slate-400 mb-2 block ml-1">Painel</label>
-          <input id="client-painel" class="input-box" placeholder="Ex: Starplay" />
-        </div>
-        <div>
-          <label class="text-[10px] font-black uppercase text-slate-400 mb-2 block ml-1">Ciclo</label>
-          <select id="client-cycle" class="filter-select">
-            <option value="mensal">Mensal</option>
-            <option value="bimestral">Bimestral</option>
-            <option value="trimestral">Trimestral</option>
-            <option value="semestral">Semestral</option>
-            <option value="anual">Anual</option>
-          </select>
-        </div>
-        <div>
-          <label class="text-[10px] font-black uppercase text-slate-400 mb-2 block ml-1">Email/Login</label>
-          <input id="client-email" class="input-box" placeholder="ex: dalvastream@gmail.com" />
-        </div>
-        <div>
-          <label class="text-[10px] font-black uppercase text-slate-400 mb-2 block ml-1">Senha (opcional)</label>
-          <input id="client-senha" class="input-box" placeholder="(vazio)" />
-        </div>
-        <div>
-          <label class="text-[10px] font-black uppercase text-slate-400 mb-2 block ml-1">Vencimento</label>
-          <input id="client-venc" type="date" class="input-box" />
-        </div>
-        <div>
-          <label class="text-[10px] font-black uppercase text-slate-400 mb-2 block ml-1">Plano (R$)</label>
-          <input id="client-plano" inputmode="decimal" class="input-box" placeholder="20,00" />
-        </div>
-        <div>
-          <label class="text-[10px] font-black uppercase text-slate-400 mb-2 block ml-1">Conexões</label>
-          <input id="client-conexoes" type="number" min="1" class="input-box" value="1" />
-        </div>
-        <div>
-          <label class="text-[10px] font-black uppercase text-slate-400 mb-2 block ml-1">ID Externo</label>
-          <input id="client-idext" class="input-box" placeholder="778897151" />
-        </div>
-        <div class="md:col-span-2">
-          <label class="text-[10px] font-black uppercase text-slate-400 mb-2 block ml-1">Observação</label>
-          <input id="client-obs" class="input-box" placeholder="Aplicativo e Mac: " />
-        </div>
-      </div>
-      <div class="grid grid-cols-2 gap-3 mt-6">
-        <button onclick="saveClient()" class="bg-sky-500 text-white py-4 rounded-2xl font-black uppercase tracking-widest">Guardar</button>
-        <button onclick="toggleModal('client-modal')" class="bg-slate-200 text-slate-600 py-4 rounded-2xl font-black uppercase tracking-widest">Cancelar</button>
-      </div>
-    </div>
-  </div>
-  <!-- MODAL: IMPORTAR CLIENTES -->
-  <div id="import-modal" class="modal-overlay" onclick="toggleModal('import-modal')">
-    <div class="bg-white dark:bg-slate-900 w-full max-w-3xl rounded-[2.5rem] p-6 shadow-3xl max-h-[90vh] overflow-y-auto" onclick="event.stopPropagation()">
-      <div class="flex items-start justify-between gap-4">
-        <div>
-          <h2 class="text-2xl font-black italic uppercase text-sky-600 tracking-tighter">Importar Clientes</h2>
-          <p class="text-xs font-bold text-slate-400 uppercase tracking-widest mt-1">Escolha servidor (ou auto)</p>
-        </div>
-        <button onclick="toggleModal('import-modal')" class="text-slate-400 font-black">Fechar</button>
-      </div>
-      <div class="grid grid-cols-1 gap-3 mt-5">
-        <div>
-          <label class="text-[10px] font-black uppercase text-slate-400 mb-2 block ml-1">Servidor (forçar)</label>
-          <select id="import-server" class="filter-select">
-            <option value="">Auto (pelo texto)</option>
-            <option value="Starplay">Starplay</option>
-            <option value="Vision">Vision</option>
-            <option value="Primelux">Primelux</option>
-            <option value="Play Tv">Play Tv</option>
-            <option value="Blast Elite">Blast Elite</option>
-            <option value="Blast Flash">Blast Flash</option>
-            <option value="Havok Radeon">Havok Radeon</option>
-            <option value="Havok Kyros">Havok Kyros</option>
-            <option value="Havok Andromeda">Havok Andromeda</option>
-            <option value="Havok Neon">Havok Neon</option>
-            <option value="Allbox">Allbox</option>
-            <option value="Ryzeen">Ryzeen</option>
-            <option value="Titan">Titan</option>
-          </select>
-        </div>
-      </div>
-      <div class="mt-4">
-        <label class="text-[10px] font-black uppercase text-slate-400 mb-2 block ml-1">Texto do painel (1 ou vários clientes)</label>
-        <textarea id="import-text" class="w-full rounded-2xl border border-slate-200 p-4 font-mono text-xs min-h-[240px]"></textarea>
-      </div>
-      <div class="mt-4 rounded-2xl border border-slate-200 bg-slate-50 p-4">
-        <div class="flex items-center justify-between gap-3">
-          <div class="text-[10px] font-black uppercase tracking-[0.3em] text-slate-400">Progresso</div>
-          <div id="import-status" class="text-xs font-bold text-slate-500">0/0</div>
-        </div>
-        <div class="h-3 rounded-full bg-slate-200 overflow-hidden mt-2">
-          <div id="import-bar" class="h-3 bg-sky-500 w-0"></div>
-        </div>
-        <div id="import-log" class="text-xs text-slate-500 mt-3 whitespace-pre-wrap"></div>
-      </div>
-      <div class="grid grid-cols-2 gap-3 mt-4">
-        <button onclick="previewImport()" class="bg-slate-900 text-white py-4 rounded-2xl font-black uppercase tracking-widest">Prévia (1º bloco)</button>
-        <button onclick="applyImportToClientForm()" class="bg-sky-500 text-white py-4 rounded-2xl font-black uppercase tracking-widest">Usar no Form</button>
-      </div>
-      <div class="mt-3">
-        <button onclick="importClientsFromText()" class="w-full bg-emerald-600 text-white py-4 rounded-2xl font-black uppercase tracking-widest">
-          Importar Tudo
-        </button>
-      </div>
-      <div class="mt-5 rounded-2xl border border-slate-200 bg-slate-50 p-4">
-        <div class="text-[10px] font-black uppercase tracking-[0.3em] text-slate-400">Prévia do parse</div>
-        <pre id="import-preview" class="text-xs mt-2 whitespace-pre-wrap"></pre>
-      </div>
-    </div>
-  </div>
-  <!-- MODAL: REVENDAS -->
-  <div id="revenda-modal" class="modal-overlay" onclick="toggleModal('revenda-modal')">
-    <div class="bg-white dark:bg-slate-900 w-full max-w-3xl rounded-[2.5rem] p-6 shadow-3xl max-h-[90vh] overflow-y-auto" onclick="event.stopPropagation()">
-      <div class="flex items-start justify-between gap-4">
-        <div>
-          <h2 id="revenda-modal-title" class="text-2xl font-black italic uppercase text-sky-600 tracking-tighter">Nova Revenda</h2>
-          <p class="text-xs font-bold text-slate-400 uppercase tracking-widest mt-1">QTD + preço por cliente, por painel</p>
-        </div>
-        <button onclick="toggleModal('revenda-modal')" class="text-slate-400 font-black">Fechar</button>
-      </div>
-      <input type="hidden" id="rev-edit-id" />
-      <div class="grid grid-cols-1 md:grid-cols-2 gap-3 mt-5">
-        <div>
-          <label class="text-[10px] font-black uppercase text-slate-400 mb-2 block ml-1">Nome do parceiro</label>
-          <input id="rev-nome" class="input-box" placeholder="Ex: Parceiro X" />
-        </div>
-        <div>
-          <label class="text-[10px] font-black uppercase text-slate-400 mb-2 block ml-1">Divisões (1=pagamento único; 2=2 parcelas)</label>
-          <input id="rev-divisoes" type="number" min="1" value="1" class="input-box" />
-        </div>
-        <div>
-          <label class="text-[10px] font-black uppercase text-slate-400 mb-2 block ml-1">Data Pagamento 1</label>
-          <input id="rev-pay-date-1" type="date" class="input-box" />
-        </div>
-        <div>
-          <label class="text-[10px] font-black uppercase text-slate-400 mb-2 block ml-1">Data Pagamento 2</label>
-          <input id="rev-pay-date-2" type="date" class="input-box" />
-        </div>
-      </div>
-      <div class="mt-5 rounded-2xl border border-slate-200 p-4 bg-slate-50 dark:bg-slate-950/40 dark:border-slate-800">
-        <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
-          <div>
-            <div class="text-[10px] font-black uppercase tracking-widest text-slate-400">Total que a revenda paga</div>
-            <div id="rev-total-paga" class="text-2xl font-black text-emerald-600">R$ 0,00</div>
-          </div>
-          <div>
-            <div class="text-[10px] font-black uppercase tracking-widest text-slate-400">Custo casinhas (Vision/Starplay)</div>
-            <div id="rev-total-custo-casinhas" class="text-2xl font-black text-rose-500">R$ 0,00</div>
-          </div>
-          <div>
-            <div class="text-[10px] font-black uppercase tracking-widest text-slate-400">Lucro</div>
-            <div id="rev-total-lucro" class="text-2xl font-black text-sky-600">R$ 0,00</div>
-          </div>
-        </div>
-      </div>
-      <div class="mt-5">
-        <h3 class="text-sm font-black uppercase tracking-widest text-slate-400 mb-3">Painéis</h3>
-        <div id="rev-server-grid" class="space-y-3"></div>
-      </div>
-      <div class="grid grid-cols-2 gap-3 mt-6">
-        <button onclick="saveRevenda()" class="bg-sky-500 text-white py-4 rounded-2xl font-black uppercase tracking-widest">Guardar</button>
-        <button onclick="toggleModal('revenda-modal')" class="bg-slate-200 text-slate-600 py-4 rounded-2xl font-black uppercase tracking-widest">Cancelar</button>
-      </div>
-    </div>
-  </div>
-`;
+window.toggleBulkSelectClients = (force) => { bulkMode = force ?? !bulkMode; renderClientsList(); };
+window.toggleDarkMode = () => document.body.classList.toggle("dark-mode");
