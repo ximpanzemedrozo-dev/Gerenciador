@@ -7,7 +7,6 @@ let currentUserId: string | null = null;
 let clients: Client[] = [];
 let bulkMode = false;
 let selectedClientIds = new Set<string>();
-
 let dashSettings = { period: 'current_month', startDate: '', endDate: '', panels: [] as string[] };
 
 declare global {
@@ -50,12 +49,12 @@ function refreshTopProfitBar() {
     if (dashSettings.period === 'current_month' && (c.cycle || 'mensal') !== 'mensal') return false;
     if (dashSettings.panels.length > 0 && !dashSettings.panels.includes(c.painel || '')) return false;
     if (!c.venc) return false;
-    const d = new Date(c.venc);
+    const d = new Date(c.venc + "T00:00:00");
     if (dashSettings.period === 'current_month') return d.getMonth() === currentMonth && d.getFullYear() === currentYear;
     if (dashSettings.period === 'custom') {
       if (!dashSettings.startDate || !dashSettings.endDate) return true;
-      const start = new Date(dashSettings.startDate);
-      const end = new Date(dashSettings.endDate);
+      const start = new Date(dashSettings.startDate + "T00:00:00");
+      const end = new Date(dashSettings.endDate + "T23:59:59");
       return d >= start && d <= end;
     }
     return true;
@@ -72,11 +71,7 @@ function refreshTopProfitBar() {
   totalPlansEl.textContent = money(faturamento);
   totalCasinhasEl.textContent = money(custo);
   realProfitEl.textContent = money(faturamento - custo);
-
-  if (infoEl) {
-    const periodTxt = dashSettings.period === 'current_month' ? 'Mês Atual' : 'Total';
-    infoEl.textContent = "Filtrando: " + periodTxt + " (" + dashList.length + " logins)";
-  }
+  if (infoEl) infoEl.textContent = "Filtrando: " + (dashSettings.period === 'current_month' ? 'Mensais do Mês' : 'Período Ativo') + " (" + dashList.length + " logins)";
 }
 
 function getFilteredClients() {
@@ -167,7 +162,7 @@ window.saveDashSettings = () => {
 
 window.toggleBulkSelectClients = (f) => { bulkMode = f ?? !bulkMode; selectedClientIds.clear(); document.getElementById("clients-bulkbar")?.classList.toggle("hidden", !bulkMode); renderClientsList(); };
 window.bulkSelectAllFilteredClients = () => { getFilteredClients().forEach(c => selectedClientIds.add(c.id)); renderClientsList(); document.getElementById("clients-bulk-count")!.textContent = String(selectedClientIds.size); };
-window.bulkDeleteSelectedClients = async () => { if(confirm("Apagar " + selectedClientIds.size + " itens?")) { for(let id of selectedClientIds) await firebaseApi.deleteDoc(firebaseApi.doc(db, "artifacts", appId, "users", currentUserId!, "clients", id)); window.toggleBulkSelectClients(false); } };
+window.bulkDeleteSelectedClients = async () => { if(confirm("Apagar selecionados?")) { for(let id of selectedClientIds) await firebaseApi.deleteDoc(firebaseApi.doc(db, "artifacts", appId, "users", currentUserId!, "clients", id)); window.toggleBulkSelectClients(false); } };
 
 export function installLegacyApp() {
   firebaseApi.onAuthStateChanged(auth, async (user) => {
@@ -180,4 +175,21 @@ export function installLegacyApp() {
         if (grid) grid.innerHTML = Array.from(new Set(clients.map(c => c.painel || 'Outros'))).map(p => "<label class='flex items-center gap-2 p-2 hover:bg-slate-50 dark:hover:bg-slate-800 rounded-lg cursor-pointer'><input type='checkbox' value='" + p + "' class='w-4 h-4' " + (dashSettings.panels.includes(p) ? "checked" : "") + "><span class='text-[10px] font-black uppercase'>" + p + "</span></label>").join('');
       });
       document.querySelectorAll('#clients-search, #filter-date-start, #filter-date-end').forEach(el => el.addEventListener('input', renderClientsList));
-      document.querySelectorAll('#clients-filter-server, #clients-filter-cycle').forEach(el => el.addEventListener('change', renderClients
+      document.querySelectorAll('#clients-filter-server, #clients-filter-cycle').forEach(el => el.addEventListener('change', renderClientsList));
+      window.switchView("clients");
+    }
+  });
+}
+
+window.handleAuth = async (m) => {
+  const e = (document.getElementById("auth-email") as HTMLInputElement).value;
+  const p = (document.getElementById("auth-password") as HTMLInputElement).value;
+  try { if (m === "login") await firebaseApi.signInWithEmailAndPassword(auth, e, p); } catch { alert("Erro de acesso."); }
+};
+window.logout = () => firebaseApi.signOut(auth);
+window.toggleModal = (id) => document.getElementById(id)?.classList.toggle("active");
+window.toggleDarkMode = () => { document.body.classList.toggle("dark-mode"); createIcons({ icons }); };
+window.switchView = (v) => { document.querySelectorAll(".view-section").forEach(s => s.classList.add("hidden")); document.getElementById("view-" + v)?.classList.remove("hidden"); document.querySelectorAll(".nav-btn").forEach(b => b.classList.remove("active")); document.getElementById("nav-" + v)?.classList.add("active"); createIcons({ icons }); };
+window.openImportClients = () => window.toggleModal("import-modal");
+window.importClientsFromText = async () => { window.toggleModal("import-modal"); };
+window.refreshFinance = () => {};
