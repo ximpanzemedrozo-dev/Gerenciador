@@ -57,9 +57,8 @@ function refreshTopProfitBar() {
   const currentMonth = now.getMonth();
   const currentYear = now.getFullYear();
 
-  // Filtragem conforme configurações da engrenagem
   const dashList = clients.filter(c => {
-    // 1. Filtrar Ciclo (Apenas Mensal conforme pedido)
+    // 1. Filtrar Ciclo (Apenas Mensal quando no modo Mês Atual)
     if (dashSettings.period === 'current_month' && (c.cycle || 'mensal') !== 'mensal') return false;
 
     // 2. Filtrar Painéis
@@ -72,6 +71,7 @@ function refreshTopProfitBar() {
     if (dashSettings.period === 'current_month') {
       return d.getMonth() === currentMonth && d.getFullYear() === currentYear;
     } else if (dashSettings.period === 'custom') {
+      if (!dashSettings.startDate || !dashSettings.endDate) return true;
       const start = new Date(dashSettings.startDate);
       const end = new Date(dashSettings.endDate);
       return d >= start && d <= end;
@@ -126,13 +126,16 @@ function renderClientsList() {
   filtered.forEach(c => {
     const div = document.createElement("div");
     const sel = selectedClientIds.has(c.id);
-    div.className = `luxury-card p-5 cursor-pointer border ${sel ? "ring-2 ring-sky-500 bg-sky-50/20" : "border-slate-200 dark:border-slate-800"}`;
+    div.className = `luxury-card p-5 cursor-pointer border ${sel ? 'ring-2 ring-sky-500 bg-sky-50/20' : 'border-slate-200 dark:border-slate-800'}`;
     
     div.innerHTML = `
       <div class="flex justify-between items-start gap-3">
         <div class="min-w-0">
-          <div class="font-black uppercase text-slate-800 dark:text-white truncate">${c.nome || "Sem nome"}</div>
-          <div class="text-[10px] font-bold text-slate-400 mt-1 uppercase">${c.painel || "Outros"} • ${c.cycle || "mensal"}</div>
+          <div class="flex items-center gap-3">
+            ${bulkMode ? `<input type="checkbox" ${sel ? 'checked' : ''} class="w-4 h-4 pointer-events-none">` : ""}
+            <div class="font-black uppercase text-slate-800 dark:text-white truncate">${c.nome || "Sem nome"}</div>
+          </div>
+          <div class="text-[10px] font-bold text-slate-400 uppercase mt-1">${c.painel || "Outros"} • ${c.cycle || "mensal"}</div>
           <div class="text-[10px] text-slate-500 mt-1 font-bold">VENC: ${c.venc ? c.venc.split('-').reverse().join('/') : '-'}</div>
           <div class="text-[11px] font-black text-sky-600 mt-2">${money(c.plano || 0)}</div>
         </div>
@@ -222,7 +225,7 @@ function renderDashSettingsUI() {
 // ---------- Ações e Init ----------
 window.toggleBulkSelectClients = (f) => { bulkMode = f ?? !bulkMode; selectedClientIds.clear(); document.getElementById("clients-bulkbar")?.classList.toggle("hidden", !bulkMode); renderClientsList(); };
 window.bulkSelectAllFilteredClients = () => { getFilteredClients().forEach(c => selectedClientIds.add(c.id)); renderClientsList(); document.getElementById("clients-bulk-count")!.textContent = String(selectedClientIds.size); };
-window.bulkDeleteSelectedClients = async () => { if(confirm(\`Apagar \${selectedClientIds.size}?\`)) { for(let id of selectedClientIds) await firebaseApi.deleteDoc(firebaseApi.doc(db, "artifacts", appId, "users", currentUserId!, "clients", id)); window.toggleBulkSelectClients(false); } };
+window.bulkDeleteSelectedClients = async () => { if(confirm(`Apagar ${selectedClientIds.size}?`)) { for(let id of selectedClientIds) await firebaseApi.deleteDoc(firebaseApi.doc(db, "artifacts", appId, "users", currentUserId!, "clients", id)); window.toggleBulkSelectClients(false); } };
 
 export function installLegacyApp() {
   firebaseApi.onAuthStateChanged(auth, async (user) => {
@@ -237,6 +240,7 @@ export function installLegacyApp() {
       
       document.querySelectorAll('#clients-search, #filter-date-start, #filter-date-end').forEach(el => el.addEventListener('input', renderClientsList));
       document.querySelectorAll('#clients-filter-server, #clients-filter-cycle').forEach(el => el.addEventListener('change', renderClientsList));
+      window.switchView("clients");
     }
   });
 }
@@ -249,7 +253,7 @@ window.handleAuth = async (m) => {
 window.logout = () => firebaseApi.signOut(auth);
 window.toggleModal = (id) => document.getElementById(id)?.classList.toggle("active");
 window.toggleDarkMode = () => { document.body.classList.toggle("dark-mode"); createIcons({ icons }); };
-window.switchView = (v) => { document.querySelectorAll(".view-section").forEach(s => s.classList.add("hidden")); document.getElementById(\`view-\${v}\`)?.classList.remove("hidden"); document.querySelectorAll(".nav-btn").forEach(b => b.classList.remove("active")); document.getElementById(\`nav-\${v}\`)?.classList.add("active"); createIcons({ icons }); };
+window.switchView = (v) => { document.querySelectorAll(".view-section").forEach(s => s.classList.add("hidden")); document.getElementById(`view-${v}`)?.classList.remove("hidden"); document.querySelectorAll(".nav-btn").forEach(b => b.classList.remove("active")); document.getElementById(`nav-${v}`)?.classList.add("active"); createIcons({ icons }); };
 window.openImportClients = () => window.toggleModal("import-modal");
 window.importClientsFromText = async () => { /* Logic */ window.toggleModal("import-modal"); };
 window.refreshFinance = () => {};
