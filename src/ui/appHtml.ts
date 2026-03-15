@@ -7,7 +7,7 @@ export const appHtml = `
       <div id="auth-error" class="hidden mb-6 p-4 bg-red-50 text-red-500 text-xs font-bold rounded-2xl border border-red-100"></div>
       <div class="space-y-4">
         <input type="email" id="auth-email" placeholder="E-mail Administrativo" class="input-box">
-        <input type="password" id="auth-password" placeholder="Chave de Acesso" class="input-box">
+        <input type="password" id="auth-password" placeholder="Senha" class="input-box">
         <button onclick="window.handleAuth('login')" class="w-full bg-sky-500 text-white py-4 rounded-2xl font-black uppercase tracking-widest shadow-md">Entrar</button>
       </div>
     </div>
@@ -39,7 +39,7 @@ export const appHtml = `
             <div><div class="text-[10px] font-black uppercase text-slate-400 mb-1">Faturamento Bruto</div><div id="top-total-plans" class="text-2xl font-black text-slate-900 dark:text-white">R$ 0,00</div></div>
             <div><div class="text-[10px] font-black uppercase text-slate-400 mb-1">Lucro Real</div><div id="top-real-profit" class="text-2xl font-black text-emerald-600">R$ 0,00</div></div>
           </div>
-          <div id="dash-info-text" class="text-[8px] font-bold uppercase text-slate-400 mt-2 border-t pt-2 dark:border-slate-800 italic">Sincronizando Dashboard...</div>
+          <div id="dash-info-text" class="text-[8px] font-bold uppercase text-slate-400 mt-2 border-t pt-2 dark:border-slate-800 italic">Sincronizando...</div>
         </div>
       </div>
     </div>
@@ -49,9 +49,9 @@ export const appHtml = `
         <div class="flex flex-col gap-3 md:flex-row md:justify-between md:items-center mb-6">
           <h2 class="text-2xl font-black italic uppercase tracking-tighter text-slate-800 dark:text-white">Clientes (<span id="clients-count">0/0</span>)</h2>
           <div class="flex gap-2">
-            <button onclick="window.toggleBulkSelectClients()" class="bg-slate-200 text-slate-700 px-4 py-2.5 rounded-xl font-black text-[10px] uppercase">Selecionar</button>
-            <button onclick="window.openImportClients()" class="bg-slate-900 text-white px-4 py-2.5 rounded-xl font-black text-[10px] uppercase">Importar</button>
-            <button onclick="window.openAddClient()" class="bg-sky-500 text-white px-4 py-2.5 rounded-xl font-black text-[10px] uppercase">Novo Cliente</button>
+            <button onclick="window.toggleBulkSelectClients()" class="bg-slate-200 text-slate-700 px-4 py-2.5 rounded-xl font-black text-[10px] uppercase shadow-sm">Selecionar</button>
+            <button onclick="window.openImportClients()" class="bg-slate-900 text-white px-4 py-2.5 rounded-xl font-black text-[10px] uppercase shadow-sm">Importar</button>
+            <button onclick="window.openAddClient()" class="bg-sky-500 text-white px-4 py-2.5 rounded-xl font-black text-[10px] uppercase shadow-sm">Novo Cliente</button>
           </div>
         </div>
 
@@ -70,11 +70,11 @@ export const appHtml = `
               <option value="quadrimestral">Quadrimestral</option><option value="quintomestral">Quintomestral</option><option value="semestral">Semestral</option><option value="anual">Anual</option>
             </select>
             <div class="flex flex-col gap-1">
-              <label class="text-[8px] font-bold text-slate-400 uppercase ml-1">Início</label>
+              <label class="text-[8px] font-bold text-slate-400 uppercase ml-1">Venc. De</label>
               <input type="date" id="filter-date-start" class="filter-select h-10" />
             </div>
             <div class="flex flex-col gap-1">
-              <label class="text-[8px] font-bold text-slate-400 uppercase ml-1">Fim</label>
+              <label class="text-[8px] font-bold text-slate-400 uppercase ml-1">Venc. Até</label>
               <input type="date" id="filter-date-end" class="filter-select h-10" />
             </div>
           </div>
@@ -82,6 +82,17 @@ export const appHtml = `
         </div>
 
         <div id="clients-list" class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4"></div>
+
+        <div id="clients-bulkbar" class="hidden fixed bottom-24 left-0 right-0 px-4 z-[60]">
+          <div class="max-w-7xl mx-auto rounded-2xl border border-slate-200 bg-white dark:bg-slate-900 shadow-2xl p-4 flex justify-between items-center animate-bounce-in">
+            <span class="text-xs font-black uppercase text-slate-800 dark:text-white">Selecionados: <span id="clients-bulk-count" class="text-sky-500">0</span></span>
+            <div class="flex gap-2">
+              <button onclick="window.bulkSelectAllFilteredClients()" class="bg-slate-900 text-white px-3 py-2 rounded-xl text-[10px] font-black uppercase">Todos</button>
+              <button onclick="window.bulkDeleteSelectedClients()" class="bg-red-600 text-white px-3 py-2 rounded-xl text-[10px] font-black uppercase">Excluir</button>
+              <button onclick="window.toggleBulkSelectClients(false)" class="bg-slate-100 text-slate-500 px-3 py-2 rounded-xl text-[10px] font-black uppercase">Sair</button>
+            </div>
+          </div>
+        </div>
       </section>
     </main>
 
@@ -93,7 +104,7 @@ export const appHtml = `
 
   <div id="notification-modal" class="modal-overlay" onclick="window.toggleModal('notification-modal')">
     <div class="bg-white dark:bg-slate-900 w-full max-w-lg rounded-[2.5rem] p-6 shadow-3xl max-h-[80vh] overflow-y-auto" onclick="event.stopPropagation()">
-      <h2 class="text-xl font-black uppercase text-sky-600 mb-6 italic text-center">Avisos de Hoje e Amanhã</h2>
+      <h2 class="text-xl font-black uppercase text-sky-600 mb-6 italic text-center">Vencimentos Próximos</h2>
       <div id="notif-list" class="space-y-3"></div>
       <button onclick="window.toggleModal('notification-modal')" class="w-full bg-slate-100 dark:bg-slate-800 text-slate-500 py-4 rounded-2xl font-black uppercase mt-8">Fechar</button>
     </div>
@@ -101,7 +112,7 @@ export const appHtml = `
 
   <div id="dash-settings-modal" class="modal-overlay" onclick="window.toggleModal('dash-settings-modal')">
     <div class="bg-white dark:bg-slate-900 w-full max-w-xl rounded-[2.5rem] p-6 shadow-3xl" onclick="event.stopPropagation()">
-      <h2 class="text-xl font-black uppercase text-sky-600 mb-6 italic text-center">Ajustar Filtros da Dashboard</h2>
+      <h2 class="text-xl font-black uppercase text-sky-600 mb-6 italic text-center">Configurar Dashboard</h2>
       <div class="space-y-4">
         <div>
           <label class="text-[10px] font-black uppercase text-slate-400 mb-2 block">Seu WhatsApp (Admin)</label>
@@ -110,8 +121,8 @@ export const appHtml = `
         <div>
           <label class="text-[10px] font-black uppercase text-slate-400 mb-2 block">Período de Cálculo</label>
           <select id="dash-setting-period" class="filter-select p-3 h-12" onchange="window.toggleDashCustomDates(this.value)">
-            <option value="current_month">Vencimentos deste Mês</option>
-            <option value="all_time">Toda a Base (Sem limite)</option>
+            <option value="current_month">Apenas Vencimentos deste Mês</option>
+            <option value="all_time">Toda a Base</option>
             <option value="custom">Período Personalizado</option>
           </select>
         </div>
@@ -120,11 +131,11 @@ export const appHtml = `
           <div><label class="text-[10px] font-black uppercase text-slate-400 mb-1 block">Venc. Até</label><input type="date" id="dash-end" class="input-box" /></div>
         </div>
         <div>
-          <label class="text-[10px] font-black uppercase text-slate-400 mb-2 block">Escolher Painéis para o Cálculo</label>
+          <label class="text-[10px] font-black uppercase text-slate-400 mb-2 block">Painéis Escolhidos</label>
           <div class="grid grid-cols-2 gap-2 max-h-40 overflow-y-auto p-3 border dark:border-slate-800 rounded-2xl bg-slate-50 dark:bg-slate-800/50" id="dash-server-checkboxes"></div>
         </div>
       </div>
-      <button onclick="window.saveDashSettings()" class="w-full bg-sky-500 text-white py-4 rounded-2xl font-black uppercase mt-8 shadow-md">Aplicar e Salvar</button>
+      <button onclick="window.saveDashSettings()" class="w-full bg-sky-500 text-white py-4 rounded-2xl font-black uppercase mt-8 shadow-md">Salvar Tudo</button>
     </div>
   </div>
 
@@ -144,10 +155,10 @@ export const appHtml = `
         </div>
         <div><label class="text-[10px] font-black uppercase text-slate-400 mb-1 block">Vencimento</label><input id="client-venc" type="date" class="input-box" /></div>
         <div><label class="text-[10px] font-black uppercase text-slate-400 mb-1 block">Valor Plano</label><input id="client-plano" class="input-box" /></div>
-        <div><label class="text-[10px] font-black uppercase text-slate-400 mb-1 block">Whats Cliente</label><input id="client-phone" class="input-box" /></div>
+        <div><label class="text-[10px] font-black uppercase text-slate-400 mb-1 block">Whats Cliente</label><input id="client-phone" class="input-box" placeholder="55..."></div>
         <div><label class="text-[10px] font-black uppercase text-slate-400 mb-1 block">ID Externo</label><input id="client-idext" class="input-box" /></div>
       </div>
-      <button onclick="window.saveClient()" class="w-full bg-sky-500 text-white py-4 rounded-2xl font-black uppercase mt-8">Gravar Dados</button>
+      <button onclick="window.saveClient()" class="w-full bg-sky-500 text-white py-4 rounded-2xl font-black uppercase mt-8">Gravar</button>
     </div>
   </div>
 
