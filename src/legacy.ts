@@ -8,16 +8,8 @@ let clients: Client[] = [];
 let bulkMode = false;
 let selectedClientIds = new Set<string>();
 
-// Painéis Oficiais
 const ALL_SERVERS = ["Starplay", "Vision", "Primelux", "Play Tv", "Blast Elite", "Blast Flash", "Havok Radeon", "Havok Kyros", "Havok Andromeda", "Havok Neon", "Allbox", "Ryzeen", "Titan"];
-
-// Estado Dashboard
-let dashSettings = { 
-  period: 'current_month', 
-  startDate: '', 
-  endDate: '', 
-  selectedPanels: [...ALL_SERVERS] // Começa com todos selecionados
-};
+let dashSettings = { period: 'current_month', startDate: '', endDate: '', selectedPanels: [...ALL_SERVERS] };
 
 declare global {
   interface Window {
@@ -43,7 +35,42 @@ declare global {
 const money = (n: number) => "R$ " + n.toLocaleString("pt-BR", { minimumFractionDigits: 2 });
 const parseNum = (s: string) => { const v = String(s).replace(/\s/g, "").replace(",", "."); const n = parseFloat(v); return isNaN(n) ? 0 : n; };
 
-// Cálculo Dashboard com Filtro de Servidores e Período
+// Lógica de Notificações (Próximos 3 dias)
+function checkUpcomingExpirations() {
+  const badge = document.getElementById("notif-badge");
+  const listCont = document.getElementById("notif-list");
+  if (!badge || !listCont) return;
+
+  const now = new Date();
+  const limit = new Date();
+  limit.setDate(now.getDate() + 3);
+
+  const upcoming = clients.filter(c => {
+    if (!c.venc) return false;
+    const d = new Date(c.venc + "T00:00:00");
+    return d >= now && d <= limit;
+  }).sort((a, b) => (a.venc! > b.venc! ? 1 : -1));
+
+  badge.classList.toggle("hidden", upcoming.length === 0);
+  
+  if (upcoming.length > 0) {
+    listCont.innerHTML = upcoming.map(c => `
+      <div class="p-4 rounded-2xl bg-sky-50 dark:bg-sky-900/20 border border-sky-100 dark:border-sky-800 flex justify-between items-center">
+        <div>
+          <div class="text-[10px] font-black uppercase text-sky-600 mb-1">${c.painel}</div>
+          <div class="text-xs font-bold text-slate-800 dark:text-white uppercase">${c.nome}</div>
+        </div>
+        <div class="text-right">
+          <div class="text-[9px] font-black uppercase text-slate-400">Vence em</div>
+          <div class="text-xs font-black text-rose-500">${c.venc?.split("-").reverse().join("/")}</div>
+        </div>
+      </div>
+    `).join('');
+  } else {
+    listCont.innerHTML = `<p class="text-xs text-slate-400 text-center py-8">Nenhum vencimento nos próximos 3 dias.</p>`;
+  }
+}
+
 function refreshTopProfitBar() {
   const totalPlansEl = document.getElementById("top-total-plans");
   const totalCasinhasEl = document.getElementById("top-total-casinhas");
@@ -57,10 +84,7 @@ function refreshTopProfitBar() {
   const currentYear = now.getFullYear();
 
   const dashList = clients.filter(c => {
-    // 1. Filtrar por Servidores Selecionados na Dashboard
     if (!dashSettings.selectedPanels.includes(c.painel || '')) return false;
-
-    // 2. Filtrar por Período
     if (!c.venc) return false;
     const d = new Date(c.venc + "T00:00:00");
     if (dashSettings.period === 'current_month') {
@@ -72,7 +96,7 @@ function refreshTopProfitBar() {
       const end = new Date(dashSettings.endDate + "T23:59:59");
       return d >= start && d <= end;
     }
-    return true; // all_time
+    return true;
   });
 
   const totalFaturamento = dashList.reduce((acc, c) => acc + (Number(c.plano) || 0), 0);
@@ -86,20 +110,15 @@ function refreshTopProfitBar() {
   totalPlansEl.textContent = money(totalFaturamento);
   totalCasinhasEl.textContent = money(totalCusto);
   realProfitEl.textContent = money(totalFaturamento - totalCusto);
-  
-  if (infoEl) {
-    const pTxt = dashSettings.period === 'current_month' ? 'Mensais do Mês' : 'Dashboard Ativa';
-    infoEl.textContent = "Exibindo: " + pTxt + " (" + dashList.length + " clientes de " + dashSettings.selectedPanels.length + " painéis)";
-  }
+  if (infoEl) infoEl.textContent = "Filtrando: " + (dashSettings.period === 'current_month' ? 'Mensais do Mês' : 'Seleção Dashboard') + " (" + dashList.length + " logins)";
 }
 
-// Renderizar Checkboxes de Servidores no Modal da Dashboard
 function renderDashboardServerCheckboxes() {
   const container = document.getElementById("dash-server-checkboxes");
   if (!container) return;
   container.innerHTML = ALL_SERVERS.map(srv => `
-    <label class="flex items-center gap-2 p-2 hover:bg-slate-100 dark:hover:bg-slate-700 rounded-xl cursor-pointer transition-colors">
-      <input type="checkbox" value="${srv}" class="dash-panel-check w-4 h-4 rounded border-slate-300" ${dashSettings.selectedPanels.includes(srv) ? 'checked' : ''}>
+    <label class="flex items-center gap-2 p-2 hover:bg-slate-100 dark:hover:bg-slate-700 rounded-xl cursor-pointer">
+      <input type="checkbox" value="${srv}" class="dash-panel-check w-4 h-4" ${dashSettings.selectedPanels.includes(srv) ? 'checked' : ''}>
       <span class="text-[10px] font-black uppercase text-slate-600 dark:text-slate-300">${srv}</span>
     </label>
   `).join('');
@@ -184,11 +203,9 @@ window.saveDashSettings = () => {
   dashSettings.period = (document.getElementById('dash-setting-period') as HTMLSelectElement).value;
   dashSettings.startDate = (document.getElementById('dash-start') as HTMLInputElement).value;
   dashSettings.endDate = (document.getElementById('dash-end') as HTMLInputElement).value;
-  
   const selected: string[] = [];
   document.querySelectorAll('.dash-panel-check:checked').forEach((el: any) => selected.push(el.value));
   dashSettings.selectedPanels = selected;
-
   window.toggleModal('dash-settings-modal');
   refreshTopProfitBar();
 };
@@ -218,17 +235,11 @@ window.importClientsFromText = async () => {
 export function installLegacyApp() {
   firebaseApi.onAuthStateChanged(auth, (user) => {
     if (user) {
-      currentUserId = user.uid; 
-      document.getElementById("auth-section")?.classList.add("hidden"); 
-      document.getElementById("app-content")?.classList.remove("hidden");
-      
+      currentUserId = user.uid; document.getElementById("auth-section")?.classList.add("hidden"); document.getElementById("app-content")?.classList.remove("hidden");
       firebaseApi.onSnapshot(firebaseApi.collection(db, "artifacts", appId, "users", user.uid, "clients"), snap => {
         clients = snap.docs.map(d => ({ id: d.id, ...d.data() })) as Client[]; 
-        renderClientsList(); 
-        refreshTopProfitBar();
-        renderDashboardServerCheckboxes();
+        renderClientsList(); refreshTopProfitBar(); renderDashboardServerCheckboxes(); checkUpcomingExpirations();
       });
-
       document.querySelectorAll('#clients-search, #filter-date-start, #filter-date-end').forEach(el => el.addEventListener('input', renderClientsList));
       document.querySelectorAll('#clients-filter-server, #clients-filter-cycle').forEach(el => el.addEventListener('change', renderClientsList));
       window.switchView("clients");
