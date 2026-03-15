@@ -42,7 +42,7 @@ declare global {
 const money = (n: number) => "R$ " + n.toLocaleString("pt-BR", { minimumFractionDigits: 2 });
 const parseNum = (s: string) => { const v = String(s).replace(/\s/g, "").replace(",", "."); const n = parseFloat(v); return isNaN(n) ? 0 : n; };
 
-// --- 1. NOTIFICAÇÕES E WHATSAPP ---
+// 1. NOTIFICAÇÕES E WHATSAPP
 function checkAndNotify() {
   if (!("Notification" in window)) return;
   if (Notification.permission !== "granted") Notification.requestPermission();
@@ -71,11 +71,11 @@ function checkAndNotify() {
         </div>`).join('');
     }
     if (Notification.permission === "granted") {
-      new Notification("Vencimentos!", { body: `${expiringToday.length + expiringTomorrow.length} logins vencendo hoje/amanhã.` });
+      new Notification("Alerta de Vencimento", { body: `Você tem ${expiringToday.length + expiringTomorrow.length} logins para hoje/amanhã.` });
     }
   } else {
     badge?.classList.add("hidden");
-    if (listCont) listCont.innerHTML = `<p class="text-xs text-slate-400 text-center py-8">Tudo em dia!</p>`;
+    if (listCont) listCont.innerHTML = `<p class="text-xs text-slate-400 text-center py-8">Tudo em ordem!</p>`;
   }
   createIcons({ icons });
 }
@@ -88,7 +88,7 @@ window.sendWhatsApp = (id) => {
   window.open(`https://wa.me/${admin}?text=${encodeURIComponent(msg)}`, "_blank");
 };
 
-// --- 2. DASHBOARD ---
+// 2. DASHBOARD
 function refreshTopProfitBar() {
   const totalPlansEl = document.getElementById("top-total-plans");
   const totalCasinhasEl = document.getElementById("top-total-casinhas");
@@ -127,7 +127,7 @@ function refreshTopProfitBar() {
   if (infoEl) infoEl.textContent = `Dashboard: ${dashList.length} itens filtrados.`;
 }
 
-// --- 3. CRUD E SELEÇÃO EM MASSA (O QUE TINHA SUMIDO) ---
+// 3. CRUD E SELEÇÃO EM MASSA
 function getFilteredClients() {
   const q = (document.getElementById("clients-search") as HTMLInputElement)?.value.toLowerCase();
   const ds = (document.getElementById("filter-date-start") as HTMLInputElement)?.value;
@@ -198,7 +198,7 @@ window.bulkSelectAllFilteredClients = () => {
 };
 
 window.bulkDeleteSelectedClients = async () => {
-  if (confirm(`Excluir ${selectedClientIds.size} clientes?`)) {
+  if (confirm(`Excluir ${selectedClientIds.size} selecionados?`)) {
     for (const id of selectedClientIds) {
       await firebaseApi.deleteDoc(firebaseApi.doc(db, "artifacts", appId, "users", currentUserId!, "clients", id));
     }
@@ -207,12 +207,79 @@ window.bulkDeleteSelectedClients = async () => {
 };
 
 window.deleteClient = async (id) => {
-  if (confirm("Deseja realmente excluir este cliente?")) {
+  if (confirm("Excluir cliente?")) {
     await firebaseApi.deleteDoc(firebaseApi.doc(db, "artifacts", appId, "users", currentUserId!, "clients", id));
   }
 };
 
-// --- 4. INICIALIZAÇÃO ---
+// 4. IMPORTAÇÃO INTELIGENTE (ATUALIZADA)
+window.importClientsFromText = async () => {
+  if (!currentUserId) return;
+  const text = (document.getElementById("import-text") as HTMLTextAreaElement).value;
+  const forcedServer = (document.getElementById("import-server-select") as HTMLSelectElement).value;
+  
+  const blocks = text.match(/\d{9}[\s\S]*?(?=\d{9}|$)/g);
+  if (!blocks) return alert("Nenhum cliente válido encontrado.");
+
+  for (let b of blocks) {
+    const id = b.match(/\b(\d{9})\b/)?.[1];
+    if (!id) continue;
+    
+    // Se escolheu servidor no select, usa ele. Senão, tenta detetar do texto.
+    let painel = forcedServer || (b.toUpperCase().includes('STARPLAY') ? 'Starplay' : b.toUpperCase().includes('VISION') ? 'Vision' : 'Outros');
+    const priceMatch = b.match(/Plano:\s*R\$\s*([\d,.]+)/i);
+    const dateMatch = b.match(/(\d{2})\/(\d{2})\/(\d{4})/);
+    let venc = "";
+    if (dateMatch) venc = `${dateMatch[3]}-${dateMatch[2]}-${dateMatch[1]}`;
+
+    await firebaseApi.addDoc(firebaseApi.collection(db, "artifacts", appId, "users", currentUserId, "clients"), {
+      nome: b.split('\n')[0].split('-')[0].trim(),
+      idExt: id,
+      painel,
+      venc,
+      plano: priceMatch ? parseFloat(priceMatch[1].replace('.', '').replace(',', '.')) : 20,
+      createdAt: new Date().toISOString()
+    });
+  }
+  alert("Importação Concluída!");
+  window.toggleModal("import-modal");
+};
+
+// 5. INICIALIZAÇÃO
+export function installLegacyApp() {
+  firebaseApi.onAuthStateChanged(auth, (user) => {
+    if (user) {
+      currentUserId = user.uid;
+      document.getElementById("auth-section")?.classList.add("hidden");
+      document.getElementById("app-content")?.classList.remove("hidden");
+      firebaseApi.onSnapshot(firebaseApi.collection(db, "artifacts", appId, "users", user.uid, "clients"), snap => {
+        clients = snap.docs.map(d => ({ id: d.id, ...d.data() })) as Client[]; 
+        refreshTopProfitBar(); checkAndNotify(); renderClientsList();
+        
+        const grid = document.getElementById('dash-server-checkboxes');
+        if (grid) {
+          grid.innerHTML = ALL_SERVERS.map(s => `<label class="flex items-center gap-2 p-2 hover:bg-slate-100 dark:hover:bg-slate-700 rounded-xl cursor-pointer"><input type="checkbox" value="${s}" class="dash-panel-check w-4 h-4" ${dashSettings.selectedPanels.includes(s) ? 'checked' : ''}><span class="text-[10px] font-black uppercase">${s}</span></label>`).join('');
+          (document.getElementById('admin-phone') as HTMLInputElement).value = dashSettings.adminPhone;
+        }
+      });
+      document.querySelectorAll('#clients-search, #filter-date-start, #filter-date-end').forEach(el => el.addEventListener('input', renderClientsList));
+      document.querySelectorAll('#clients-filter-server').forEach(el => el.addEventListener('change', renderClientsList));
+      window.switchView("clients");
+    }
+  });
+}
+
+window.handleAuth = async (m) => {
+  const e = (document.getElementById("auth-email") as HTMLInputElement).value;
+  const p = (document.getElementById("auth-password") as HTMLInputElement).value;
+  try { if (m === "login") await firebaseApi.signInWithEmailAndPassword(auth, e, p); } catch { alert("Erro de Login."); }
+};
+window.logout = () => { firebaseApi.signOut(auth); window.location.reload(); };
+window.toggleModal = (id) => document.getElementById(id)?.classList.toggle("active");
+window.toggleDarkMode = () => { document.body.classList.toggle("dark-mode"); createIcons({ icons }); };
+window.switchView = (v) => { document.querySelectorAll(".view-section").forEach(s => s.classList.add("hidden")); document.getElementById("view-" + v)?.classList.remove("hidden"); createIcons({ icons }); };
+window.toggleDashCustomDates = (v) => document.getElementById("dash-custom-dates")?.classList.toggle("hidden", v !== "custom");
+window.openAddClient = () => { (document.getElementById("client-edit-id") as HTMLInputElement).value = ""; (document.getElementById("client-nome") as HTMLInputElement).value = ""; window.toggleModal("client-modal"); };
 window.saveDashSettings = () => {
   const admin = (document.getElementById('admin-phone') as HTMLInputElement).value;
   localStorage.setItem("adminPhone", admin);
@@ -226,41 +293,6 @@ window.saveDashSettings = () => {
   window.toggleModal('dash-settings-modal');
   refreshTopProfitBar();
 };
-
-export function installLegacyApp() {
-  firebaseApi.onAuthStateChanged(auth, (user) => {
-    if (user) {
-      currentUserId = user.uid;
-      document.getElementById("auth-section")?.classList.add("hidden");
-      document.getElementById("app-content")?.classList.remove("hidden");
-      firebaseApi.onSnapshot(firebaseApi.collection(db, "artifacts", appId, "users", user.uid, "clients"), snap => {
-        clients = snap.docs.map(d => ({ id: d.id, ...d.data() })) as Client[]; 
-        refreshTopProfitBar(); checkAndNotify(); renderClientsList();
-        const grid = document.getElementById('dash-server-checkboxes');
-        if (grid) {
-          grid.innerHTML = ALL_SERVERS.map(s => `<label class="flex items-center gap-2 p-2 hover:bg-slate-100 dark:hover:bg-slate-700 rounded-xl cursor-pointer"><input type="checkbox" value="${s}" class="dash-panel-check w-4 h-4" ${dashSettings.selectedPanels.includes(s) ? 'checked' : ''}><span class="text-[10px] font-black uppercase text-slate-600 dark:text-slate-300">${s}</span></label>`).join('');
-          (document.getElementById('admin-phone') as HTMLInputElement).value = dashSettings.adminPhone;
-        }
-      });
-      document.querySelectorAll('#clients-search, #filter-date-start, #filter-date-end').forEach(el => el.addEventListener('input', renderClientsList));
-      document.querySelectorAll('#clients-filter-server, #clients-filter-cycle').forEach(el => el.addEventListener('change', renderClientsList));
-      window.switchView("clients");
-    }
-  });
-}
-
-// Funções Auxiliares
-window.handleAuth = async (m) => {
-  const e = (document.getElementById("auth-email") as HTMLInputElement).value;
-  const p = (document.getElementById("auth-password") as HTMLInputElement).value;
-  try { if (m === "login") await firebaseApi.signInWithEmailAndPassword(auth, e, p); } catch (err: any) { alert("Erro de Login."); }
-};
-window.logout = () => { firebaseApi.signOut(auth); window.location.reload(); };
-window.toggleModal = (id) => document.getElementById(id)?.classList.toggle("active");
-window.toggleDarkMode = () => { document.body.classList.toggle("dark-mode"); createIcons({ icons }); };
-window.switchView = (v) => { document.querySelectorAll(".view-section").forEach(s => s.classList.add("hidden")); document.getElementById("view-" + v)?.classList.remove("hidden"); createIcons({ icons }); };
-window.toggleDashCustomDates = (v) => document.getElementById("dash-custom-dates")?.classList.toggle("hidden", v !== "custom");
-window.openAddClient = () => { (document.getElementById("client-edit-id") as HTMLInputElement).value = ""; (document.getElementById("client-nome") as HTMLInputElement).value = ""; window.toggleModal("client-modal"); };
 window.openEditClient = (id) => {
   const c = clients.find(x => x.id === id); if (!c) return;
   (document.getElementById("client-edit-id") as HTMLInputElement).value = id;
@@ -290,4 +322,3 @@ window.saveClient = async () => {
   window.toggleModal("client-modal");
 };
 window.openImportClients = () => window.toggleModal("import-modal");
-window.importClientsFromText = async () => { /* Mantida lógica de blocos */ window.toggleModal("import-modal"); };
