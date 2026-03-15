@@ -2,7 +2,7 @@ import { auth, db, appId, firebaseApi } from "./firebase";
 import { createIcons, icons } from "lucide";
 
 // ---------- Tipos ----------
-type Client = { id: string; nome?: string; painel?: string; cycle?: string; email?: string; venc?: string; plano?: number; idExt?: string; status?: string; };
+type Client = { id: string; nome?: string; painel?: string; cycle?: string; email?: string; venc?: string; plano?: number; idExt?: string; };
 
 // ---------- Estado Global ----------
 let currentUserId: string | null = null;
@@ -10,7 +10,7 @@ let clients: Client[] = [];
 let bulkMode = false;
 let selectedClientIds = new Set<string>();
 
-// ---------- Funções Globais (Anexadas ao window para o HTML) ----------
+// ---------- Globais (Window) ----------
 declare global {
   interface Window {
     handleAuth: (m: string) => Promise<void>;
@@ -22,12 +22,12 @@ declare global {
     openEditClient: (id: string) => void;
     saveClient: () => Promise<void>;
     deleteClient: (id: string) => Promise<void>;
-    openImportClients: () => void;
-    previewImport: () => void;
-    importClientsFromText: () => Promise<void>;
     toggleBulkSelectClients: (f?: boolean) => void;
     bulkSelectAllFilteredClients: () => void;
     bulkDeleteSelectedClients: () => Promise<void>;
+    openImportClients: () => void;
+    previewImport: () => void;
+    importClientsFromText: () => Promise<void>;
     refreshFinance: () => void;
   }
 }
@@ -36,12 +36,11 @@ declare global {
 const money = (n: number) => `R$ ${n.toLocaleString("pt-BR", { minimumFractionDigits: 2 })}`;
 const parseNum = (s: string) => { const v = s.replace(/\s/g, "").replace(",", "."); const n = parseFloat(v); return isNaN(n) ? 0 : n; };
 
-// ---------- Lógica de Lucro Real (Regra: Starplay=2.50 / Vision=2.00 / Outros=0) ----------
+// ---------- Lógica de Lucro Real (Regra: Starplay=2.5, Vision=2.0, Outros=0) ----------
 function refreshTopProfitBar() {
   const totalPlansEl = document.getElementById("top-total-plans");
   const totalCasinhasEl = document.getElementById("top-total-casinhas");
   const realProfitEl = document.getElementById("top-real-profit");
-  const metaEl = document.getElementById("top-casinhas-meta");
 
   if (!totalPlansEl || !totalCasinhasEl || !realProfitEl) return;
 
@@ -56,12 +55,6 @@ function refreshTopProfitBar() {
   totalPlansEl.textContent = money(totalFaturamento);
   totalCasinhasEl.textContent = money(totalCusto);
   realProfitEl.textContent = money(totalFaturamento - totalCusto);
-
-  if (metaEl) {
-    const s = clients.filter(c => c.painel === "Starplay").length;
-    const v = clients.filter(c => c.painel === "Vision").length;
-    metaEl.textContent = `Starplay: ${s} • Vision: ${v}`;
-  }
 }
 
 // ---------- Renderização e Filtros ----------
@@ -74,7 +67,7 @@ function getFilteredClients() {
     if (srv && c.painel !== srv) return false;
     if (cyc && (c.cycle || "mensal") !== cyc) return false;
     if (!q) return true;
-    return (c.nome || "").toLowerCase().includes(q) || (c.idExt || "").toLowerCase().includes(q);
+    return (c.nome || "").toLowerCase().includes(q) || (c.idExt || "").toLowerCase().includes(q) || (c.painel || "").toLowerCase().includes(q);
   });
 }
 
@@ -88,12 +81,16 @@ function renderClientsList() {
   filtered.forEach(c => {
     const div = document.createElement("div");
     const sel = selectedClientIds.has(c.id);
-    div.className = `luxury-card p-5 cursor-pointer border ${sel ? "border-sky-500 bg-sky-50/20" : "border-slate-200 dark:border-slate-800"}`;
+    div.className = `luxury-card p-5 cursor-pointer border ${sel ? "ring-2 ring-sky-500 bg-sky-50/20" : "border-slate-200 dark:border-slate-800"}`;
+    
     div.innerHTML = `
       <div class="flex justify-between items-start gap-3">
         <div class="min-w-0">
-          <div class="font-black uppercase text-slate-800 dark:text-white truncate">${c.nome || "Sem nome"}</div>
-          <div class="text-[10px] font-bold text-slate-400 mt-1 uppercase">${c.painel || "Outros"} • ID: ${c.idExt || "-"}</div>
+          <div class="flex items-center gap-3">
+            ${bulkMode ? `<input type="checkbox" ${sel ? "checked" : ""} class="w-4 h-4 pointer-events-none">` : ""}
+            <div class="font-black uppercase text-slate-800 dark:text-white truncate">${c.nome || "Sem nome"}</div>
+          </div>
+          <div class="text-[10px] font-bold text-slate-400 uppercase mt-1">${c.painel || "Outros"} • ${c.cycle || "mensal"}</div>
           <div class="text-[11px] font-black text-sky-600 mt-2">${money(c.plano || 0)}</div>
         </div>
         ${!bulkMode ? `
@@ -103,7 +100,15 @@ function renderClientsList() {
           </div>` : ""}
       </div>
     `;
-    div.onclick = () => { if (bulkMode) { sel ? selectedClientIds.delete(c.id) : selectedClientIds.add(c.id); renderClientsList(); document.getElementById("clients-bulk-count")!.textContent = String(selectedClientIds.size); } };
+    
+    div.onclick = () => {
+      if (bulkMode) {
+        if (selectedClientIds.has(c.id)) selectedClientIds.delete(c.id);
+        else selectedClientIds.add(c.id);
+        renderClientsList();
+        document.getElementById("clients-bulk-count")!.textContent = String(selectedClientIds.size);
+      }
+    };
     cont.appendChild(div);
   });
   createIcons({ icons });
@@ -120,10 +125,11 @@ window.openAddClient = () => {
 window.openEditClient = (id) => {
   const c = clients.find(x => x.id === id); if (!c) return;
   (document.getElementById("client-edit-id") as HTMLInputElement).value = id;
+  (document.getElementById("client-modal-title")!).textContent = "Editar Cliente";
   (document.getElementById("client-nome") as HTMLInputElement).value = c.nome || "";
-  (document.getElementById("client-painel") as HTMLInputElement).value = c.painel || "";
-  (document.getElementById("client-venc") as HTMLInputElement).value = c.venc || "";
+  (document.getElementById("client-painel") as HTMLSelectElement).value = c.painel || "Starplay";
   (document.getElementById("client-cycle") as HTMLSelectElement).value = c.cycle || "mensal";
+  (document.getElementById("client-venc") as HTMLInputElement).value = c.venc || "";
   (document.getElementById("client-plano") as HTMLInputElement).value = (c.plano || 0).toLocaleString("pt-BR", { minimumFractionDigits: 2 });
   (document.getElementById("client-idext") as HTMLInputElement).value = c.idExt || "";
   window.toggleModal("client-modal");
@@ -134,28 +140,25 @@ window.saveClient = async () => {
   const id = (document.getElementById("client-edit-id") as HTMLInputElement).value;
   const data = {
     nome: (document.getElementById("client-nome") as HTMLInputElement).value,
-    painel: (document.getElementById("client-painel") as HTMLInputElement).value,
+    painel: (document.getElementById("client-painel") as HTMLSelectElement).value,
     cycle: (document.getElementById("client-cycle") as HTMLSelectElement).value,
     venc: (document.getElementById("client-venc") as HTMLInputElement).value,
     plano: parseNum((document.getElementById("client-plano") as HTMLInputElement).value),
     idExt: (document.getElementById("client-idext") as HTMLInputElement).value,
     updatedAt: new Date().toISOString()
   };
-  const coll = firebaseApi.collection(db, "artifacts", appId, "users", currentUserId, "clients");
-  id ? await firebaseApi.updateDoc(firebaseApi.doc(db, "artifacts", appId, "users", currentUserId, "clients", id), data) : await firebaseApi.addDoc(coll, { ...data, createdAt: data.updatedAt });
+  const path = firebaseApi.collection(db, "artifacts", appId, "users", currentUserId, "clients");
+  id ? await firebaseApi.updateDoc(firebaseApi.doc(db, "artifacts", appId, "users", currentUserId, "clients", id), data) : await firebaseApi.addDoc(path, data);
   window.toggleModal("client-modal");
 };
 
 window.deleteClient = async (id) => { if(confirm("Apagar cliente?")) await firebaseApi.deleteDoc(firebaseApi.doc(db, "artifacts", appId, "users", currentUserId!, "clients", id)); };
 
-// ---------- Importação e Bulk ----------
-window.previewImport = () => { /* Implementar lógica de parse conforme necessário */ };
-window.importClientsFromText = async () => { alert("Iniciando importação..."); window.toggleModal("import-modal"); };
+// ---------- Ações e Init ----------
 window.toggleBulkSelectClients = (f) => { bulkMode = f ?? !bulkMode; selectedClientIds.clear(); document.getElementById("clients-bulkbar")?.classList.toggle("hidden", !bulkMode); renderClientsList(); };
 window.bulkSelectAllFilteredClients = () => { getFilteredClients().forEach(c => selectedClientIds.add(c.id)); renderClientsList(); document.getElementById("clients-bulk-count")!.textContent = String(selectedClientIds.size); };
 window.bulkDeleteSelectedClients = async () => { if(confirm(`Apagar ${selectedClientIds.size}?`)) { for(let id of selectedClientIds) await firebaseApi.deleteDoc(firebaseApi.doc(db, "artifacts", appId, "users", currentUserId!, "clients", id)); window.toggleBulkSelectClients(false); } };
 
-// ---------- Init e Navegação ----------
 export function installLegacyApp() {
   firebaseApi.onAuthStateChanged(auth, async (user) => {
     if (user) {
@@ -178,6 +181,6 @@ window.handleAuth = async (m) => {
 window.logout = () => firebaseApi.signOut(auth);
 window.toggleModal = (id) => document.getElementById(id)?.classList.toggle("active");
 window.toggleDarkMode = () => { document.body.classList.toggle("dark-mode"); createIcons({ icons }); };
-window.switchView = (v) => { document.querySelectorAll(".view-section").forEach(s => s.classList.add("hidden")); document.getElementById(`view-${v}`)?.classList.remove("hidden"); document.querySelectorAll(".nav-btn").forEach(b => b.classList.remove("active")); document.getElementById(`nav-${v}`)?.classList.add("active"); if (v === "finance") window.refreshFinance(); createIcons({ icons }); };
-window.refreshFinance = () => { /* Implementar resumo por ciclo */ };
+window.switchView = (v) => { document.querySelectorAll(".view-section").forEach(s => s.classList.add("hidden")); document.getElementById(`view-${v}`)?.classList.remove("hidden"); document.querySelectorAll(".nav-btn").forEach(b => b.classList.remove("active")); document.getElementById(`nav-${v}`)?.classList.add("active"); createIcons({ icons }); };
 window.openImportClients = () => window.toggleModal("import-modal");
+window.previewImport = () => {}; window.importClientsFromText = async () => {}; window.refreshFinance = () => {};
