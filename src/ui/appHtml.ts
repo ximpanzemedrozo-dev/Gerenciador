@@ -38,10 +38,10 @@ export const appHtml = `
         <div class="rounded-3xl border border-slate-200 bg-white/95 dark:bg-slate-900/90 p-4 shadow-sm">
           <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
             <div><div class="text-[10px] font-black uppercase text-slate-400 mb-1">Custo Selecionado</div><div id="top-total-casinhas" class="text-2xl font-black text-rose-500">R$ 0,00</div></div>
-            <div><div class="text-[10px] font-black uppercase text-slate-400 mb-1">Faturamento</div><div id="top-total-plans" class="text-2xl font-black text-slate-900 dark:text-white">R$ 0,00</div></div>
-            <div><div class="text-[10px] font-black uppercase text-slate-400 mb-1">Lucro Real</div><div id="top-real-profit" class="text-2xl font-black text-emerald-600">R$ 0,00</div></div>
+            <div><div class="text-[10px] font-black uppercase text-slate-400 mb-1">Faturamento Bruto</div><div id="top-total-plans" class="text-2xl font-black text-slate-900 dark:text-white">R$ 0,00</div></div>
+            <div><div class="text-[10px] font-black uppercase text-slate-400 mb-1">Lucro Real Líquido</div><div id="top-real-profit" class="text-2xl font-black text-emerald-600">R$ 0,00</div></div>
           </div>
-          <div id="dash-info-text" class="text-[9px] font-bold uppercase text-slate-400 mt-2 border-t pt-2 dark:border-slate-800 italic text-center">Calculando indicadores...</div>
+          <div id="dash-info-text" class="text-[9px] font-bold uppercase text-slate-400 mt-2 border-t pt-2 dark:border-slate-800 italic text-center">Calculando dashboard...</div>
         </div>
       </div>
     </div>
@@ -51,23 +51,23 @@ export const appHtml = `
         <div class="flex flex-col gap-3 md:flex-row md:justify-between md:items-center mb-6">
           <h2 class="text-2xl font-black italic uppercase tracking-tighter text-slate-800 dark:text-white">Clientes (<span id="clients-count">0/0</span>)</h2>
           <div class="flex gap-2">
-            <button onclick="window.toggleBulkSelectClients()" class="bg-slate-200 text-slate-700 px-4 py-2.5 rounded-xl font-black text-[10px] uppercase">Selecionar</button>
-            <button onclick="window.openImportClients()" class="bg-slate-900 text-white px-4 py-2.5 rounded-xl font-black text-[10px] uppercase">Importar</button>
-            <button onclick="window.openAddClient()" class="bg-sky-500 text-white px-4 py-2.5 rounded-xl font-black text-[10px] uppercase">Novo</button>
+            <button onclick="window.toggleBulkSelectClients()" class="bg-slate-200 text-slate-700 px-4 py-2.5 rounded-xl font-black text-[10px] uppercase shadow-sm">Selecionar</button>
+            <button onclick="window.openImportClients()" class="bg-slate-900 text-white px-4 py-2.5 rounded-xl font-black text-[10px] uppercase shadow-sm">Importar</button>
+            <button onclick="window.openAddClient()" class="bg-sky-500 text-white px-4 py-2.5 rounded-xl font-black text-[10px] uppercase shadow-sm">Novo</button>
           </div>
         </div>
 
         <div class="rounded-2xl border border-slate-200 bg-white dark:bg-slate-900 p-4 mb-6 space-y-4 shadow-sm">
           <div class="grid grid-cols-2 md:grid-cols-4 gap-3">
             <select id="clients-filter-server" class="filter-select">
-              <option value="">Todos Servidores</option>
+              <option value="">Painéis (Todos)</option>
               <option value="Starplay">Starplay</option><option value="Vision">Vision</option><option value="Primelux">Primelux</option>
               <option value="Play Tv">Play Tv</option><option value="Blast Elite">Blast Elite</option><option value="Blast Flash">Blast Flash</option>
               <option value="Havok Radeon">Havok Radeon</option><option value="Havok Kyros">Havok Kyros</option><option value="Havok Andromeda">Havok Andromeda</option>
               <option value="Havok Neon">Havok Neon</option><option value="Allbox">Allbox</option><option value="Ryzeen">Ryzeen</option><option value="Titan">Titan</option>
             </select>
             <select id="clients-filter-cycle" class="filter-select">
-              <option value="">Ciclos</option>
+              <option value="">Ciclos (Todos)</option>
               <option value="mensal">Mensal</option><option value="bimestral">Bimestral</option><option value="trimestral">Trimestral</option>
               <option value="quadrimestral">Quadrimestral</option><option value="quintomestral">Quintomestral</option><option value="semestral">Semestral</option><option value="anual">Anual</option>
             </select>
@@ -80,7 +80,7 @@ export const appHtml = `
               <input type="date" id="filter-date-end" class="filter-select h-10" />
             </div>
           </div>
-          <div class="relative">
+          <div class="relative group">
             <i data-lucide="search" class="absolute left-4 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400"></i>
             <input id="clients-search" class="input-box pl-11 py-3" placeholder="Buscar por nome, login ou painel..." />
           </div>
@@ -90,7 +90,7 @@ export const appHtml = `
 
         <div id="clients-bulkbar" class="hidden fixed bottom-24 left-0 right-0 px-4 z-[60]">
           <div class="max-w-7xl mx-auto rounded-2xl border border-slate-200 bg-white dark:bg-slate-900 shadow-2xl p-4 flex justify-between items-center">
-            <span class="text-xs font-black uppercase">Selecionados: <span id="clients-bulk-count" class="text-sky-500">0</span></span>
+            <span class="text-xs font-black uppercase text-slate-800 dark:text-white">Itens: <span id="clients-bulk-count" class="text-sky-500">0</span></span>
             <div class="flex gap-2">
               <button onclick="window.bulkSelectAllFilteredClients()" class="bg-slate-900 text-white px-3 py-2 rounded-xl text-[10px] font-black uppercase">Todos</button>
               <button onclick="window.bulkDeleteSelectedClients()" class="bg-red-600 text-white px-3 py-2 rounded-xl text-[10px] font-black uppercase">Apagar</button>
@@ -114,9 +114,9 @@ export const appHtml = `
         <div>
           <label class="text-[10px] font-black uppercase text-slate-400 mb-2 block">Período de Cálculo</label>
           <select id="dash-setting-period" class="filter-select p-3 h-12" onchange="window.toggleDashCustomDates(this.value)">
-            <option value="current_month">Apenas Vencimentos deste Mês (Mensais)</option>
-            <option value="all_time">Toda a Base (Todos Ciclos)</option>
-            <option value="custom">Período Personalizado</option>
+            <option value="current_month">Vencimentos deste Mês (Mensais)</option>
+            <option value="all_time">Toda a Base (Sem Filtro de Data)</option>
+            <option value="custom">Período Customizado</option>
           </select>
         </div>
         <div id="dash-custom-dates" class="hidden grid grid-cols-2 gap-3">
@@ -124,11 +124,12 @@ export const appHtml = `
           <div><label class="text-[10px] font-black uppercase text-slate-400 mb-1 block">Data Final</label><input type="date" id="dash-end" class="input-box" /></div>
         </div>
         <div>
-          <label class="text-[10px] font-black uppercase text-slate-400 mb-2 block">Filtrar Painéis na Dashboard</label>
-          <div id="dash-panel-options" class="grid grid-cols-2 gap-2 max-h-40 overflow-y-auto p-2 border dark:border-slate-800 rounded-xl"></div>
+          <label class="text-[10px] font-black uppercase text-slate-400 mb-2 block">Filtrar por Servidores</label>
+          <div class="grid grid-cols-2 gap-2 max-h-48 overflow-y-auto p-3 border dark:border-slate-800 rounded-2xl bg-slate-50 dark:bg-slate-800/50" id="dash-server-checkboxes">
+            </div>
         </div>
       </div>
-      <button onclick="window.saveDashSettings()" class="w-full bg-sky-500 text-white py-4 rounded-2xl font-black uppercase mt-8">Aplicar à Dashboard</button>
+      <button onclick="window.saveDashSettings()" class="w-full bg-sky-500 text-white py-4 rounded-2xl font-black uppercase mt-8 shadow-md">Aplicar Filtros</button>
     </div>
   </div>
 
@@ -162,20 +163,20 @@ export const appHtml = `
 
   <div id="import-modal" class="modal-overlay" onclick="window.toggleModal('import-modal')">
     <div class="bg-white dark:bg-slate-900 w-full max-w-2xl rounded-[2.5rem] p-6 shadow-3xl" onclick="event.stopPropagation()">
-      <h2 class="text-2xl font-black italic uppercase text-sky-600 mb-6">Importar Lote</h2>
+      <h2 class="text-2xl font-black italic uppercase text-sky-600 mb-6">Importar Clientes</h2>
       <div class="mb-4">
-        <label class="text-[10px] font-black uppercase text-slate-400 mb-1 block ml-1">Vincular ao Servidor</label>
+        <label class="text-[10px] font-black uppercase text-slate-400 mb-1 block ml-1">Painel Destino</label>
         <select id="import-target-server" class="filter-select p-3 h-12">
-          <option value="">Detetar do Texto</option>
+          <option value="">Auto-Detectar</option>
           <option value="Starplay">Starplay</option><option value="Vision">Vision</option><option value="Primelux">Primelux</option>
           <option value="Play Tv">Play Tv</option><option value="Blast Elite">Blast Elite</option><option value="Blast Flash">Blast Flash</option>
           <option value="Havok Radeon">Havok Radeon</option><option value="Havok Kyros">Havok Kyros</option><option value="Havok Andromeda">Havok Andromeda</option>
           <option value="Havok Neon">Havok Neon</option><option value="Allbox">Allbox</option><option value="Ryzeen">Ryzeen</option><option value="Titan">Titan</option>
         </select>
       </div>
-      <textarea id="import-text" class="w-full h-48 border dark:border-slate-700 rounded-2xl p-4 font-mono text-[10px] mb-4 outline-none dark:bg-slate-800" placeholder="Cole os dados aqui..."></textarea>
+      <textarea id="import-text" class="w-full h-48 border dark:border-slate-700 rounded-2xl p-4 font-mono text-[10px] mb-4 outline-none dark:bg-slate-800" placeholder="Cole o texto aqui..."></textarea>
       <div class="grid grid-cols-2 gap-3">
-        <button onclick="window.importClientsFromText()" class="bg-emerald-600 text-white py-3 rounded-xl font-black uppercase text-[10px]">Importar Agora</button>
+        <button onclick="window.importClientsFromText()" class="bg-emerald-600 text-white py-3 rounded-xl font-black uppercase text-[10px]">Importar Tudo</button>
         <button onclick="window.toggleModal('import-modal')" class="bg-slate-200 text-slate-500 py-3 rounded-xl font-black uppercase text-[10px]">Fechar</button>
       </div>
     </div>
