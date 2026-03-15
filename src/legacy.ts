@@ -26,6 +26,7 @@ declare global {
     openImportClients: () => void;
     importClientsFromText: () => Promise<void>;
     saveDashSettings: () => void;
+    toggleDashCustomDates: (v: string) => void;
     refreshFinance: () => void;
   }
 }
@@ -33,6 +34,7 @@ declare global {
 const money = (n: number) => "R$ " + n.toLocaleString("pt-BR", { minimumFractionDigits: 2 });
 const parseNum = (s: string) => { const v = String(s).replace(/\s/g, "").replace(",", "."); const n = parseFloat(v); return isNaN(n) ? 0 : n; };
 
+// Lógica Dashboard corrigida: Starplay=2.5, Vision=2.0, Outros=0
 function refreshTopProfitBar() {
   const totalPlansEl = document.getElementById("top-total-plans");
   const totalCasinhasEl = document.getElementById("top-total-casinhas");
@@ -46,18 +48,24 @@ function refreshTopProfitBar() {
   const currentYear = now.getFullYear();
 
   const dashList = clients.filter(c => {
-    if (dashSettings.period === 'current_month' && (c.cycle || 'mensal') !== 'mensal') return false;
+    // 1. Filtrar Painéis (Selecionados na engrenagem)
     if (dashSettings.panels.length > 0 && !dashSettings.panels.includes(c.painel || '')) return false;
+
+    // 2. Filtrar Período
     if (!c.venc) return false;
     const d = new Date(c.venc + "T00:00:00");
-    if (dashSettings.period === 'current_month') return d.getMonth() === currentMonth && d.getFullYear() === currentYear;
-    if (dashSettings.period === 'custom') {
+    
+    if (dashSettings.period === 'current_month') {
+      // Regra automática: Apenas ciclo mensal deste mês conforme pedido anterior
+      if ((c.cycle || 'mensal') !== 'mensal') return false;
+      return d.getMonth() === currentMonth && d.getFullYear() === currentYear;
+    } else if (dashSettings.period === 'custom') {
       if (!dashSettings.startDate || !dashSettings.endDate) return true;
       const start = new Date(dashSettings.startDate + "T00:00:00");
       const end = new Date(dashSettings.endDate + "T23:59:59");
       return d >= start && d <= end;
     }
-    return true;
+    return true; // all_time
   });
 
   const faturamento = dashList.reduce((acc, c) => acc + (Number(c.plano) || 0), 0);
@@ -65,13 +73,17 @@ function refreshTopProfitBar() {
     const p = (c.painel || "").trim();
     if (p === "Starplay") return acc + 2.50;
     if (p === "Vision") return acc + 2.00;
-    return acc;
+    return acc; // Outros = 0 conforme solicitado
   }, 0);
 
   totalPlansEl.textContent = money(faturamento);
   totalCasinhasEl.textContent = money(custo);
   realProfitEl.textContent = money(faturamento - custo);
-  if (infoEl) infoEl.textContent = "Filtrando: " + (dashSettings.period === 'current_month' ? 'Mensais do Mês' : 'Período Ativo') + " (" + dashList.length + " logins)";
+
+  if (infoEl) {
+    const pTxt = dashSettings.period === 'current_month' ? 'Mensais do Mês' : dashSettings.period === 'all_time' ? 'Base Toda' : 'Período Personalizado';
+    infoEl.textContent = "Filtrando: " + pTxt + " (" + dashList.length + " logins)";
+  }
 }
 
 function getFilteredClients() {
@@ -87,7 +99,7 @@ function getFilteredClients() {
     if (dStart && c.venc && c.venc < dStart) return false;
     if (dEnd && c.venc && c.venc > dEnd) return false;
     if (!q) return true;
-    return (c.nome || "").toLowerCase().includes(q) || (c.idExt || "").toLowerCase().includes(q);
+    return (c.nome || "").toLowerCase().includes(q) || (c.idExt || "").toLowerCase().includes(q) || (c.painel || "").toLowerCase().includes(q);
   });
 }
 
@@ -96,39 +108,28 @@ function renderClientsList() {
   if (!cont) return;
   const filtered = getFilteredClients();
   document.getElementById("clients-count")!.textContent = filtered.length + "/" + clients.length;
+
   cont.innerHTML = "";
   filtered.forEach(c => {
     const div = document.createElement("div");
     const sel = selectedClientIds.has(c.id);
     div.className = "luxury-card p-5 cursor-pointer border " + (sel ? "ring-2 ring-sky-500 bg-sky-50/20" : "border-slate-200 dark:border-slate-800");
     div.innerHTML = "<div class='flex justify-between items-start gap-3'><div class='min-w-0'><div class='flex items-center gap-3'>" + (bulkMode ? "<input type='checkbox' " + (sel ? "checked" : "") + " class='w-4 h-4 pointer-events-none'>" : "") + "<div class='font-black uppercase text-slate-800 dark:text-white truncate'>" + (c.nome || "Sem nome") + "</div></div><div class='text-[10px] font-bold text-slate-400 uppercase mt-1'>" + (c.painel || "Outros") + " • " + (c.cycle || "mensal") + "</div><div class='text-[10px] text-slate-500 mt-1 font-bold'>VENC: " + (c.venc ? c.venc.split("-").reverse().join("/") : "-") + "</div><div class='text-[11px] font-black text-sky-600 mt-2'>" + money(c.plano || 0) + "</div></div>" + (!bulkMode ? "<div class='flex flex-col gap-2'><button class='btn-edit p-2 bg-slate-100 dark:bg-slate-800 rounded-xl text-slate-500'><i data-lucide='edit-3' class='w-4 h-4'></i></button><button class='btn-del p-2 bg-red-50 rounded-xl text-red-500'><i data-lucide='trash-2' class='w-4 h-4'></i></button></div>" : "") + "</div>";
-    div.onclick = () => { if (bulkMode) { sel ? selectedClientIds.delete(c.id) : selectedClientIds.add(c.id); renderClientsList(); document.getElementById("clients-bulk-count")!.textContent = String(selectedClientIds.size); } };
+    
+    div.onclick = () => {
+      if (bulkMode) {
+        if (selectedClientIds.has(c.id)) selectedClientIds.delete(c.id);
+        else selectedClientIds.add(c.id);
+        renderClientsList();
+        document.getElementById("clients-bulk-count")!.textContent = String(selectedClientIds.size);
+      }
+    };
     div.querySelector(".btn-edit")?.addEventListener("click", (e) => { e.stopPropagation(); window.openEditClient(c.id); });
     div.querySelector(".btn-del")?.addEventListener("click", (e) => { e.stopPropagation(); window.deleteClient(c.id); });
     cont.appendChild(div);
   });
   createIcons({ icons });
 }
-
-window.openAddClient = () => {
-  (document.getElementById("client-edit-id") as HTMLInputElement).value = "";
-  (document.getElementById("client-nome") as HTMLInputElement).value = "";
-  (document.getElementById("client-plano") as HTMLInputElement).value = "20,00";
-  window.toggleModal("client-modal");
-};
-
-window.openEditClient = (id) => {
-  const c = clients.find(x => x.id === id); if (!c) return;
-  (document.getElementById("client-edit-id") as HTMLInputElement).value = id;
-  (document.getElementById("client-modal-title")!).textContent = "Editar Cliente";
-  (document.getElementById("client-nome") as HTMLInputElement).value = c.nome || "";
-  (document.getElementById("client-painel") as HTMLSelectElement).value = c.painel || "Starplay";
-  (document.getElementById("client-cycle") as HTMLSelectElement).value = c.cycle || "mensal";
-  (document.getElementById("client-venc") as HTMLInputElement).value = c.venc || "";
-  (document.getElementById("client-plano") as HTMLInputElement).value = (c.plano || 0).toLocaleString("pt-BR", { minimumFractionDigits: 2 });
-  (document.getElementById("client-idext") as HTMLInputElement).value = c.idExt || "";
-  window.toggleModal("client-modal");
-};
 
 window.saveClient = async () => {
   if (!currentUserId) return;
@@ -147,8 +148,6 @@ window.saveClient = async () => {
   window.toggleModal("client-modal");
 };
 
-window.deleteClient = async (id) => { if(confirm("Apagar cliente?")) await firebaseApi.deleteDoc(firebaseApi.doc(db, "artifacts", appId, "users", currentUserId!, "clients", id)); };
-
 window.saveDashSettings = () => {
   dashSettings.period = (document.getElementById('dash-setting-period') as HTMLSelectElement).value;
   dashSettings.startDate = (document.getElementById('dash-start') as HTMLInputElement).value;
@@ -160,9 +159,39 @@ window.saveDashSettings = () => {
   refreshTopProfitBar();
 };
 
-window.toggleBulkSelectClients = (f) => { bulkMode = f ?? !bulkMode; selectedClientIds.clear(); document.getElementById("clients-bulkbar")?.classList.toggle("hidden", !bulkMode); renderClientsList(); };
-window.bulkSelectAllFilteredClients = () => { getFilteredClients().forEach(c => selectedClientIds.add(c.id)); renderClientsList(); document.getElementById("clients-bulk-count")!.textContent = String(selectedClientIds.size); };
-window.bulkDeleteSelectedClients = async () => { if(confirm("Apagar selecionados?")) { for(let id of selectedClientIds) await firebaseApi.deleteDoc(firebaseApi.doc(db, "artifacts", appId, "users", currentUserId!, "clients", id)); window.toggleBulkSelectClients(false); } };
+window.importClientsFromText = async () => {
+  if (!currentUserId) return;
+  const text = (document.getElementById("import-text") as HTMLTextAreaElement).value;
+  const targetServer = (document.getElementById("import-target-server") as HTMLSelectElement).value;
+  const blocks = text.match(/\d{9}[\s\S]*?(?=\d{9}|$)/g);
+  if (!blocks) return alert("Nenhum cliente válido encontrado.");
+
+  for (let b of blocks) {
+    const id = b.match(/\b(\d{9})\b/)?.[1];
+    if (!id) continue;
+    
+    let painel = targetServer;
+    if (!painel) {
+      if (b.toUpperCase().includes('STARPLAY')) painel = 'Starplay';
+      else if (b.toUpperCase().includes('VISION')) painel = 'Vision';
+      else painel = 'Outros';
+    }
+
+    const priceMatch = b.match(/Plano:\s*R\$\s*([\d,.]+)/i);
+    const plano = priceMatch ? parseFloat(priceMatch[1].replace('.', '').replace(',', '.')) : 20.00;
+
+    await firebaseApi.addDoc(firebaseApi.collection(db, "artifacts", appId, "users", currentUserId, "clients"), {
+      nome: b.split('\n')[0].split('-')[0].trim() || 'Novo Cliente',
+      idExt: id,
+      painel,
+      plano,
+      cycle: 'mensal',
+      createdAt: new Date().toISOString()
+    });
+  }
+  alert("Finalizado!");
+  window.toggleModal("import-modal");
+};
 
 export function installLegacyApp() {
   firebaseApi.onAuthStateChanged(auth, async (user) => {
@@ -191,5 +220,9 @@ window.toggleModal = (id) => document.getElementById(id)?.classList.toggle("acti
 window.toggleDarkMode = () => { document.body.classList.toggle("dark-mode"); createIcons({ icons }); };
 window.switchView = (v) => { document.querySelectorAll(".view-section").forEach(s => s.classList.add("hidden")); document.getElementById("view-" + v)?.classList.remove("hidden"); document.querySelectorAll(".nav-btn").forEach(b => b.classList.remove("active")); document.getElementById("nav-" + v)?.classList.add("active"); createIcons({ icons }); };
 window.openImportClients = () => window.toggleModal("import-modal");
-window.importClientsFromText = async () => { window.toggleModal("import-modal"); };
-window.refreshFinance = () => {};
+window.openAddClient = () => { (document.getElementById("client-edit-id") as HTMLInputElement).value = ""; (document.getElementById("client-nome") as HTMLInputElement).value = ""; window.toggleModal("client-modal"); };
+window.deleteClient = async (id) => { if(confirm("Apagar?")) await firebaseApi.deleteDoc(firebaseApi.doc(db, "artifacts", appId, "users", currentUserId!, "clients", id)); };
+window.toggleDashCustomDates = (v) => { document.getElementById("dash-custom-dates")?.classList.toggle("hidden", v !== "custom"); };
+window.toggleBulkSelectClients = (f) => { bulkMode = f ?? !bulkMode; selectedClientIds.clear(); document.getElementById("clients-bulkbar")?.classList.toggle("hidden", !bulkMode); renderClientsList(); };
+window.bulkSelectAllFilteredClients = () => { getFilteredClients().forEach(c => selectedClientIds.add(c.id)); renderClientsList(); document.getElementById("clients-bulk-count")!.textContent = String(selectedClientIds.size); };
+window.bulkDeleteSelectedClients = async () => { if(confirm("Apagar selecionados?")) { for(let id of selectedClientIds) await firebaseApi.deleteDoc(firebaseApi.doc(db, "artifacts", appId, "users", currentUserId!, "clients", id)); window.toggleBulkSelectClients(false); } };
