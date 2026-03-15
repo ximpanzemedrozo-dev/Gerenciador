@@ -6,8 +6,8 @@ export const appHtml = `
       </h1>
       <div id="auth-error" class="hidden mb-6 p-4 bg-red-50 text-red-500 text-xs font-bold rounded-2xl border border-red-100"></div>
       <div class="space-y-4">
-        <input type="email" id="auth-email" placeholder="E-mail" class="input-box">
-        <input type="password" id="auth-password" placeholder="Senha" class="input-box">
+        <input type="email" id="auth-email" placeholder="E-mail Administrativo" class="input-box">
+        <input type="password" id="auth-password" placeholder="Chave de Acesso" class="input-box">
         <button onclick="window.handleAuth('login')" class="w-full bg-sky-500 text-white py-4 rounded-2xl font-black uppercase tracking-widest shadow-md">Entrar</button>
       </div>
     </div>
@@ -31,11 +31,11 @@ export const appHtml = `
         </button>
         <div class="rounded-3xl border border-slate-200 bg-white/95 dark:bg-slate-900/90 p-4 shadow-sm">
           <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
-            <div><div class="text-[10px] font-black uppercase text-slate-400 mb-1">Custo Seleção</div><div id="top-total-casinhas" class="text-2xl font-black text-rose-500">R$ 0,00</div></div>
+            <div><div class="text-[10px] font-black uppercase text-slate-400 mb-1">Custo (Dashboard)</div><div id="top-total-casinhas" class="text-2xl font-black text-rose-500">R$ 0,00</div></div>
             <div><div class="text-[10px] font-black uppercase text-slate-400 mb-1">Faturamento</div><div id="top-total-plans" class="text-2xl font-black text-slate-900 dark:text-white">R$ 0,00</div></div>
             <div><div class="text-[10px] font-black uppercase text-slate-400 mb-1">Lucro Líquido</div><div id="top-real-profit" class="text-2xl font-black text-emerald-600">R$ 0,00</div></div>
           </div>
-          <div id="dash-info-text" class="text-[9px] font-bold uppercase text-slate-400 mt-2 border-t pt-2 dark:border-slate-800">Filtrando indicadores...</div>
+          <div id="dash-info-text" class="text-[9px] font-bold uppercase text-slate-400 mt-2 border-t pt-2 dark:border-slate-800">Filtrando: Mensais do Mês Atual</div>
         </div>
       </div>
     </div>
@@ -54,41 +54,28 @@ export const appHtml = `
         <div class="rounded-2xl border border-slate-200 bg-white dark:bg-slate-900 p-4 mb-6 space-y-4 shadow-sm">
           <div class="grid grid-cols-2 md:grid-cols-4 gap-3">
             <select id="clients-filter-server" class="filter-select">
-              <option value="">Todos Painéis</option>
-              <option value="Starplay">Starplay</option>
-              <option value="Vision">Vision</option>
-              <option value="Primelux">Primelux</option>
-              <option value="Play Tv">Play Tv</option>
-              <option value="Blast Elite">Blast Elite</option>
-              <option value="Blast Flash">Blast Flash</option>
-              <option value="Havok Radeon">Havok Radeon</option>
-              <option value="Havok Kyros">Havok Kyros</option>
-              <option value="Havok Andromeda">Havok Andromeda</option>
-              <option value="Havok Neon">Havok Neon</option>
-              <option value="Allbox">Allbox</option>
-              <option value="Ryzeen">Ryzeen</option>
-              <option value="Titan">Titan</option>
+              <option value="">Painéis</option>
+              <option value="Starplay">Starplay</option><option value="Vision">Vision</option><option value="Primelux">Primelux</option>
+              <option value="Play Tv">Play Tv</option><option value="Blast Elite">Blast Elite</option><option value="Blast Flash">Blast Flash</option>
+              <option value="Havok Radeon">Havok Radeon</option><option value="Havok Kyros">Havok Kyros</option><option value="Havok Andromeda">Havok Andromeda</option>
+              <option value="Havok Neon">Havok Neon</option><option value="Allbox">Allbox</option><option value="Ryzeen">Ryzeen</option><option value="Titan">Titan</option>
             </select>
             <select id="clients-filter-cycle" class="filter-select">
-              <option value="">Todos Ciclos</option>
-              <option value="mensal">Mensal</option>
-              <option value="bimestral">Bimestral</option>
-              <option value="trimestral">Trimestral</option>
-              <option value="quadrimestral">Quadrimestral</option>
-              <option value="quintomestral">Quintomestral</option>
-              <option value="semestral">Semestral</option>
-              <option value="anual">Anual</option>
+              <option value="">Ciclos</option>
+              <option value="mensal">Mensal</option><option value="bimestral">Bimestral</option><option value="trimestral">Trimestral</option>
+              <option value="quadrimestral">Quadrimestral</option><option value="quintomestral">Quintomestral</option>
+              <option value="semestral">Semestral</option><option value="anual">Anual</option>
             </select>
             <div class="flex flex-col gap-1">
-              <label class="text-[8px] font-bold text-slate-400 uppercase ml-1">De</label>
+              <label class="text-[8px] font-bold text-slate-400 uppercase ml-1">Venc. De</label>
               <input type="date" id="filter-date-start" class="filter-select h-10" />
             </div>
             <div class="flex flex-col gap-1">
-              <label class="text-[8px] font-bold text-slate-400 uppercase ml-1">Até</label>
+              <label class="text-[8px] font-bold text-slate-400 uppercase ml-1">Venc. Até</label>
               <input type="date" id="filter-date-end" class="filter-select h-10" />
             </div>
           </div>
-          <div class="relative"><i data-lucide="search" class="absolute left-4 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400"></i><input id="clients-search" class="input-box pl-11 py-3" placeholder="Procurar nome, login, ID..." /></div>
+          <div class="relative"><i data-lucide="search" class="absolute left-4 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400"></i><input id="clients-search" class="input-box pl-11 py-3" placeholder="Procurar nome, login, painel..." /></div>
         </div>
 
         <div id="clients-list" class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4"></div>
@@ -106,7 +93,7 @@ export const appHtml = `
       </section>
     </main>
 
-    <nav class="fixed bottom-0 left-0 right-0 bg-white/95 dark:bg-slate-950/95 border-t dark:border-slate-800 h-20 flex justify-around items-center px-4 z-50 shadow-2xl">
+    <nav class="fixed bottom-0 left-0 right-0 bg-white/95 dark:bg-slate-950/95 border-t dark:border-slate-800 h-20 flex justify-around items-center px-4 z-50">
       <button onclick="window.switchView('clients')" id="nav-clients" class="nav-btn active"><i data-lucide="users"></i><span>Clientes</span></button>
       <button onclick="window.switchView('finance')" id="nav-finance" class="nav-btn"><i data-lucide="wallet"></i><span>Ganhos</span></button>
     </nav>
@@ -129,7 +116,7 @@ export const appHtml = `
           <div><label class="text-[10px] font-black uppercase text-slate-400 mb-1 block">Fim</label><input type="date" id="dash-end" class="input-box" /></div>
         </div>
         <div>
-          <label class="text-[10px] font-black uppercase text-slate-400 mb-2 block">Filtrar por Painel</label>
+          <label class="text-[10px] font-black uppercase text-slate-400 mb-2 block">Filtrar Painéis na Dashboard</label>
           <div id="dash-panel-options" class="grid grid-cols-2 gap-2 max-h-40 overflow-y-auto p-2 border dark:border-slate-800 rounded-xl"></div>
         </div>
       </div>
@@ -154,7 +141,8 @@ export const appHtml = `
         <div><label class="text-[10px] font-black uppercase text-slate-400 mb-1 block">Ciclo</label>
           <select id="client-cycle" class="filter-select p-3 h-[52px]">
             <option value="mensal">Mensal</option><option value="bimestral">Bimestral</option><option value="trimestral">Trimestral</option>
-            <option value="quadrimestral">Quadrimestral</option><option value="quintomestral">Quintomestral</option><option value="semestral">Semestral</option><option value="anual">Anual</option>
+            <option value="quadrimestral">Quadrimestral</option><option value="quintomestral">Quintomestral</option>
+            <option value="semestral">Semestral</option><option value="anual">Anual</option>
           </select>
         </div>
         <div><label class="text-[10px] font-black uppercase text-slate-400 mb-1 block">Vencimento</label><input id="client-venc" type="date" class="input-box" /></div>
@@ -167,18 +155,16 @@ export const appHtml = `
 
   <div id="import-modal" class="modal-overlay" onclick="window.toggleModal('import-modal')">
     <div class="bg-white dark:bg-slate-900 w-full max-w-2xl rounded-[2.5rem] p-6 shadow-3xl" onclick="event.stopPropagation()">
-      <h2 class="text-2xl font-black italic uppercase text-sky-600 mb-6">Importar Clientes</h2>
+      <h2 class="text-2xl font-black italic uppercase text-sky-600 mb-6">Importação</h2>
       <div class="mb-4">
-        <label class="text-[10px] font-black uppercase text-slate-400 mb-1 block ml-1">Servidor de Destino</label>
+        <label class="text-[10px] font-black uppercase text-slate-400 mb-1 block">Servidor de Destino</label>
         <select id="import-target-server" class="filter-select p-3 h-12">
-          <option value="">Detectar Automaticamente</option>
+          <option value="">Detectar Automático</option>
           <option value="Starplay">Starplay</option><option value="Vision">Vision</option><option value="Primelux">Primelux</option>
-          <option value="Play Tv">Play Tv</option><option value="Blast Elite">Blast Elite</option><option value="Blast Flash">Blast Flash</option>
-          <option value="Havok Radeon">Havok Radeon</option><option value="Havok Kyros">Havok Kyros</option><option value="Havok Andromeda">Havok Andromeda</option>
-          <option value="Havok Neon">Havok Neon</option><option value="Allbox">Allbox</option><option value="Ryzeen">Ryzeen</option><option value="Titan">Titan</option>
+          <option value="Blast Elite">Blast Elite</option><option value="Havok Radeon">Havok Radeon</option>
         </select>
       </div>
-      <textarea id="import-text" class="w-full h-48 border dark:border-slate-700 rounded-2xl p-4 font-mono text-[10px] mb-4 outline-none dark:bg-slate-800" placeholder="Cole o texto do painel aqui..."></textarea>
+      <textarea id="import-text" class="w-full h-48 border dark:border-slate-700 rounded-2xl p-4 font-mono text-[10px] mb-4 outline-none dark:bg-slate-800" placeholder="Cole o texto aqui..."></textarea>
       <div class="grid grid-cols-2 gap-3">
         <button onclick="window.importClientsFromText()" class="bg-emerald-600 text-white py-3 rounded-xl font-black uppercase text-[10px]">Importar Tudo</button>
         <button onclick="window.toggleModal('import-modal')" class="bg-slate-200 text-slate-500 py-3 rounded-xl font-black uppercase text-[10px]">Fechar</button>
