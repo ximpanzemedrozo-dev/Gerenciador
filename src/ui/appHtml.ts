@@ -59,7 +59,7 @@ export const appHtml = `
 
     <main id="app-main" class="max-w-7xl mx-auto px-4 pt-64 pb-32">
       <section id="view-clients" class="view-section">
-        <div class="flex flex-col gap-3 md:flex-row md:justify-between md:items-center mb-6">
+        <div class="flex flex-col gap-3 md:flex-row md:items-center md:justify-between mb-6">
           <h2 class="text-2xl font-black italic uppercase tracking-tighter">Clientes (<span id="clients-count">0/0</span>)</h2>
           <div class="flex gap-2">
             <button onclick="window.toggleBulkSelectClients()" class="bg-slate-200 text-slate-700 px-4 py-2.5 rounded-xl font-black text-[10px] uppercase">Selecionar</button>
@@ -70,8 +70,32 @@ export const appHtml = `
 
         <div class="rounded-2xl border border-slate-200 bg-white dark:bg-slate-900 p-4 mb-6 space-y-4 shadow-sm">
           <div class="grid grid-cols-2 md:grid-cols-4 gap-3">
-            <select id="clients-filter-server" class="filter-select"><option value="">Painéis</option><option value="Starplay">Starplay</option><option value="Vision">Vision</option></select>
-            <select id="clients-filter-cycle" class="filter-select"><option value="">Ciclos</option><option value="mensal">Mensal</option><option value="trimestral">Trimestral</option><option value="anual">Anual</option></select>
+            <select id="clients-filter-server" class="filter-select">
+              <option value="">Painéis</option>
+              <option value="Starplay">Starplay</option>
+              <option value="Vision">Vision</option>
+              <option value="Primelux">Primelux</option>
+              <option value="Play Tv">Play Tv</option>
+              <option value="Blast Elite">Blast Elite</option>
+              <option value="Blast Flash">Blast Flash</option>
+              <option value="Havok Radeon">Havok Radeon</option>
+              <option value="Havok Kyros">Havok Kyros</option>
+              <option value="Havok Andromeda">Havok Andromeda</option>
+              <option value="Havok Neon">Havok Neon</option>
+              <option value="Allbox">Allbox</option>
+              <option value="Ryzeen">Ryzeen</option>
+              <option value="Titan">Titan</option>
+            </select>
+            <select id="clients-filter-cycle" class="filter-select">
+              <option value="">Ciclos</option>
+              <option value="mensal">Mensal</option>
+              <option value="bimestral">Bimestral</option>
+              <option value="trimestral">Trimestral</option>
+              <option value="quadrimestral">Quadrimestral</option>
+              <option value="quintomestral">Quintomestral</option>
+              <option value="semestral">Semestral</option>
+              <option value="anual">Anual</option>
+            </select>
             <div class="flex flex-col gap-1">
               <label class="text-[8px] font-bold text-slate-400 uppercase ml-1">Venc. De</label>
               <input type="date" id="filter-date-start" class="filter-select h-10" />
@@ -129,43 +153,4 @@ export const appHtml = `
             </div>
         </div>
       </div>
-      <button onclick="window.saveDashSettings()" class="w-full bg-sky-500 text-white py-4 rounded-2xl font-black uppercase mt-8">Aplicar Filtros</button>
-    </div>
-  </div>
-
-  <div id="client-modal" class="modal-overlay" onclick="window.toggleModal('client-modal')">
-    <div class="bg-white dark:bg-slate-900 w-full max-w-2xl rounded-[2.5rem] p-6 shadow-3xl max-h-[90vh] overflow-y-auto" onclick="event.stopPropagation()">
-      <h2 id="client-modal-title" class="text-2xl font-black italic uppercase text-sky-600 mb-6">Ficha do Cliente</h2>
-      <input type="hidden" id="client-edit-id" />
-      <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
-        <div><label class="text-[10px] font-black uppercase text-slate-400 mb-1 block">Nome</label><input id="client-nome" class="input-box" /></div>
-        <div><label class="text-[10px] font-black uppercase text-slate-400 mb-1 block">Servidor</label>
-          <select id="client-painel" class="filter-select p-3 h-[52px]">
-            <option value="Starplay">Starplay</option><option value="Vision">Vision</option><option value="Primelux">Primelux</option>
-            <option value="Blast Elite">Blast Elite</option><option value="Havok Radeon">Havok Radeon</option>
-          </select>
-        </div>
-        <div><label class="text-[10px] font-black uppercase text-slate-400 mb-1 block">Ciclo</label>
-          <select id="client-cycle" class="filter-select p-3 h-[52px]">
-            <option value="mensal">Mensal</option><option value="trimestral">Trimestral</option><option value="anual">Anual</option>
-          </select>
-        </div>
-        <div><label class="text-[10px] font-black uppercase text-slate-400 mb-1 block">Vencimento</label><input id="client-venc" type="date" class="input-box" /></div>
-        <div><label class="text-[10px] font-black uppercase text-slate-400 mb-1 block">Plano (R$)</label><input id="client-plano" class="input-box" /></div>
-        <div><label class="text-[10px] font-black uppercase text-slate-400 mb-1 block">ID Externo</label><input id="client-idext" class="input-box" /></div>
-      </div>
-      <button onclick="window.saveClient()" class="w-full bg-sky-500 text-white py-4 rounded-2xl font-black uppercase mt-8">Gravar Dados</button>
-    </div>
-  </div>
-
-  <div id="import-modal" class="modal-overlay" onclick="window.toggleModal('import-modal')">
-    <div class="bg-white dark:bg-slate-900 w-full max-w-2xl rounded-[2.5rem] p-6 shadow-3xl" onclick="event.stopPropagation()">
-      <h2 class="text-2xl font-black italic uppercase text-sky-600 mb-6">Importação</h2>
-      <textarea id="import-text" class="w-full h-48 border dark:border-slate-700 rounded-2xl p-4 font-mono text-[10px] mb-4 outline-none dark:bg-slate-800" placeholder="Cole o texto aqui..."></textarea>
-      <div class="grid grid-cols-2 gap-3">
-        <button onclick="window.importClientsFromText()" class="bg-emerald-600 text-white py-3 rounded-xl font-black uppercase text-[10px]">Importar Tudo</button>
-        <button onclick="window.toggleModal('import-modal')" class="bg-slate-200 text-slate-500 py-3 rounded-xl font-black uppercase text-[10px]">Fechar</button>
-      </div>
-    </div>
-  </div>
-`;
+      <button onclick="window.saveDashSettings()" class="w-full bg-sky-500 text-white py-4 rounded
