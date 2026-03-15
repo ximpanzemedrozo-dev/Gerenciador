@@ -42,25 +42,80 @@ declare global {
 const money = (n: number) => "R$ " + n.toLocaleString("pt-BR", { minimumFractionDigits: 2 });
 const parseNum = (s: string) => { const v = String(s).replace(/\s/g, "").replace(",", "."); const n = parseFloat(v); return isNaN(n) ? 0 : n; };
 
-// 1. NOTIFICAÇÕES E WHATSAPP
+// 1. IMPORTAÇÃO INTELIGENTE (NOVO FORMATO)
+window.importClientsFromText = async () => {
+  if (!currentUserId) return;
+  const text = (document.getElementById("import-text") as HTMLTextAreaElement).value;
+  const forcedServer = (document.getElementById("import-server-select") as HTMLSelectElement).value;
+  
+  // Divide o texto em blocos que começam com o ID (7 dígitos)
+  const blocks = text.split(/(?=\b\d{7}\b)/);
+  let count = 0;
+
+  for (let b of blocks) {
+    const lines = b.trim().split('\n');
+    if (lines.length < 5) continue;
+
+    const idExt = lines[0].trim(); // Primeira linha é o ID
+    const dateMatch = b.match(/(\d{2})\/(\d{2})\/(\d{4})/);
+    let venc = "";
+    if (dateMatch) venc = `${dateMatch[3]}-${dateMatch[2]}-${dateMatch[1]}`;
+
+    // Captura Nome e Plano
+    let nome = "Cliente Importado";
+    let plano = 20;
+    const planoIdx = lines.findIndex(l => l.includes("Plano: R$"));
+    if (planoIdx > 0) {
+      nome = lines[planoIdx - 1].trim(); // Linha acima do plano é o nome
+      const valMatch = lines[planoIdx].match(/Plano:\s*R\$\s*([\d,.]+)/i);
+      if (valMatch) plano = parseFloat(valMatch[1].replace('.', '').replace(',', '.'));
+    }
+
+    // Detecção de Servidor baseada no texto ou seleção forçada
+    let painel = forcedServer;
+    if (!painel) {
+      const bUp = b.toUpperCase();
+      if (bUp.includes('STARPLAY')) painel = 'Starplay';
+      else if (bUp.includes('VISION')) painel = 'Vision';
+      else if (bUp.includes('KYROS')) painel = 'Havok Kyros';
+      else if (bUp.includes('RADEON')) painel = 'Havok Radeon';
+      else if (bUp.includes('ANDROMEDA')) painel = 'Havok Andromeda';
+      else if (bUp.includes('NEON')) painel = 'Havok Neon';
+      else if (bUp.includes('BLAST ELITE')) painel = 'Blast Elite';
+      else if (bUp.includes('BLAST FLASH')) painel = 'Blast Flash';
+      else if (bUp.includes('ALLBOX')) painel = 'Allbox';
+      else if (bUp.includes('RYZEEN')) painel = 'Ryzeen';
+      else if (bUp.includes('TITAN')) painel = 'Titan';
+      else if (bUp.includes('PLAY TV')) painel = 'Play Tv';
+      else if (bUp.includes('PRIMELUX')) painel = 'Primelux';
+      else painel = 'Outros';
+    }
+
+    await firebaseApi.addDoc(firebaseApi.collection(db, "artifacts", appId, "users", currentUserId, "clients"), {
+      nome, idExt, painel, venc, plano, createdAt: new Date().toISOString()
+    });
+    count++;
+  }
+  alert(`${count} clientes importados com sucesso!`);
+  window.toggleModal("import-modal");
+};
+
+// 2. NOTIFICAÇÕES E WHATSAPP
 function checkAndNotify() {
   if (!("Notification" in window)) return;
   if (Notification.permission !== "granted") Notification.requestPermission();
-
   const todayStr = new Date().toISOString().split('T')[0];
   const tomorrow = new Date(); tomorrow.setDate(tomorrow.getDate() + 1);
-  const tomorrowStr = tomorrow.toISOString().split('T')[0];
+  const tomStr = tomorrow.toISOString().split('T')[0];
 
-  const expiringToday = clients.filter(c => c.venc === todayStr);
-  const expiringTomorrow = clients.filter(c => c.venc === tomorrowStr);
-
+  const upcoming = clients.filter(c => c.venc === todayStr || c.venc === tomStr);
   const badge = document.getElementById("notif-badge");
   const listCont = document.getElementById("notif-list");
   
-  if (expiringToday.length > 0 || expiringTomorrow.length > 0) {
+  if (upcoming.length > 0) {
     badge?.classList.remove("hidden");
     if (listCont) {
-      listCont.innerHTML = [...expiringToday, ...expiringTomorrow].map(c => `
+      listCont.innerHTML = upcoming.map(c => `
         <div class="p-4 rounded-2xl ${c.venc === todayStr ? 'bg-rose-50 border-rose-100' : 'bg-sky-50 border-sky-100'} dark:bg-slate-800 border flex justify-between items-center">
           <div>
             <div class="text-[9px] font-black uppercase ${c.venc === todayStr ? 'text-rose-500' : 'text-sky-500'}">${c.venc === todayStr ? 'Vence Hoje' : 'Vence Amanhã'}</div>
@@ -69,9 +124,6 @@ function checkAndNotify() {
           </div>
           <button onclick="window.sendWhatsApp('${c.id}')" class="p-2.5 bg-emerald-500 text-white rounded-xl"><i data-lucide="message-circle" class="w-4 h-4"></i></button>
         </div>`).join('');
-    }
-    if (Notification.permission === "granted") {
-      new Notification("Alerta de Vencimento", { body: `Você tem ${expiringToday.length + expiringTomorrow.length} logins para hoje/amanhã.` });
     }
   } else {
     badge?.classList.add("hidden");
@@ -84,17 +136,15 @@ window.sendWhatsApp = (id) => {
   const c = clients.find(x => x.id === id); if (!c) return;
   const admin = dashSettings.adminPhone.replace(/\D/g, "");
   if (!admin) return alert("Configure seu WhatsApp na engrenagem!");
-  const msg = `⚠️ *AVISO*\n\n👤 *Cliente:* ${c.nome}\n🖥️ *Painel:* ${c.painel}\n📅 *Vencimento:* ${c.venc?.split("-").reverse().join("/")}\n💰 *Valor:* ${money(c.plano || 0)}\n📱 *Whats Cliente:* ${c.phone || 'N/A'}`;
+  const msg = `⚠️ *AVISO*\n\n👤 *Cliente:* ${c.nome}\n🖥️ *Painel:* ${c.painel}\n📅 *Vencimento:* ${c.venc?.split("-").reverse().join("/")}\n💰 *Valor:* ${money(c.plano || 0)}\n📱 *ID:* ${c.idExt || 'N/A'}`;
   window.open(`https://wa.me/${admin}?text=${encodeURIComponent(msg)}`, "_blank");
 };
 
-// 2. DASHBOARD
+// 3. DASHBOARD E FINANCEIRO
 function refreshTopProfitBar() {
   const totalPlansEl = document.getElementById("top-total-plans");
   const totalCasinhasEl = document.getElementById("top-total-casinhas");
   const realProfitEl = document.getElementById("top-real-profit");
-  const infoEl = document.getElementById("dash-info-text");
-
   if (!totalPlansEl || !totalCasinhasEl || !realProfitEl) return;
 
   const now = new Date();
@@ -124,10 +174,11 @@ function refreshTopProfitBar() {
   totalPlansEl.textContent = money(faturamento);
   totalCasinhasEl.textContent = money(custo);
   realProfitEl.textContent = money(faturamento - custo);
+  const infoEl = document.getElementById("dash-info-text");
   if (infoEl) infoEl.textContent = `Dashboard: ${dashList.length} itens filtrados.`;
 }
 
-// 3. CRUD E SELEÇÃO EM MASSA
+// 4. CRUD E SELEÇÃO EM MASSA
 function getFilteredClients() {
   const q = (document.getElementById("clients-search") as HTMLInputElement)?.value.toLowerCase();
   const ds = (document.getElementById("filter-date-start") as HTMLInputElement)?.value;
@@ -187,7 +238,6 @@ window.toggleBulkSelectClients = (f) => {
   bulkMode = f ?? !bulkMode;
   selectedClientIds.clear();
   document.getElementById("clients-bulkbar")?.classList.toggle("hidden", !bulkMode);
-  document.getElementById("clients-bulk-count")!.textContent = "0";
   renderClientsList();
 };
 
@@ -199,51 +249,12 @@ window.bulkSelectAllFilteredClients = () => {
 
 window.bulkDeleteSelectedClients = async () => {
   if (confirm(`Excluir ${selectedClientIds.size} selecionados?`)) {
-    for (const id of selectedClientIds) {
-      await firebaseApi.deleteDoc(firebaseApi.doc(db, "artifacts", appId, "users", currentUserId!, "clients", id));
-    }
+    for (const id of selectedClientIds) await firebaseApi.deleteDoc(firebaseApi.doc(db, "artifacts", appId, "users", currentUserId!, "clients", id));
     window.toggleBulkSelectClients(false);
   }
 };
 
-window.deleteClient = async (id) => {
-  if (confirm("Excluir cliente?")) {
-    await firebaseApi.deleteDoc(firebaseApi.doc(db, "artifacts", appId, "users", currentUserId!, "clients", id));
-  }
-};
-
-// 4. IMPORTAÇÃO INTELIGENTE (ATUALIZADA)
-window.importClientsFromText = async () => {
-  if (!currentUserId) return;
-  const text = (document.getElementById("import-text") as HTMLTextAreaElement).value;
-  const forcedServer = (document.getElementById("import-server-select") as HTMLSelectElement).value;
-  
-  const blocks = text.match(/\d{9}[\s\S]*?(?=\d{9}|$)/g);
-  if (!blocks) return alert("Nenhum cliente válido encontrado.");
-
-  for (let b of blocks) {
-    const id = b.match(/\b(\d{9})\b/)?.[1];
-    if (!id) continue;
-    
-    // Se escolheu servidor no select, usa ele. Senão, tenta detetar do texto.
-    let painel = forcedServer || (b.toUpperCase().includes('STARPLAY') ? 'Starplay' : b.toUpperCase().includes('VISION') ? 'Vision' : 'Outros');
-    const priceMatch = b.match(/Plano:\s*R\$\s*([\d,.]+)/i);
-    const dateMatch = b.match(/(\d{2})\/(\d{2})\/(\d{4})/);
-    let venc = "";
-    if (dateMatch) venc = `${dateMatch[3]}-${dateMatch[2]}-${dateMatch[1]}`;
-
-    await firebaseApi.addDoc(firebaseApi.collection(db, "artifacts", appId, "users", currentUserId, "clients"), {
-      nome: b.split('\n')[0].split('-')[0].trim(),
-      idExt: id,
-      painel,
-      venc,
-      plano: priceMatch ? parseFloat(priceMatch[1].replace('.', '').replace(',', '.')) : 20,
-      createdAt: new Date().toISOString()
-    });
-  }
-  alert("Importação Concluída!");
-  window.toggleModal("import-modal");
-};
+window.deleteClient = async (id) => { if (confirm("Excluir cliente?")) await firebaseApi.deleteDoc(firebaseApi.doc(db, "artifacts", appId, "users", currentUserId!, "clients", id)); };
 
 // 5. INICIALIZAÇÃO
 export function installLegacyApp() {
@@ -258,7 +269,7 @@ export function installLegacyApp() {
         
         const grid = document.getElementById('dash-server-checkboxes');
         if (grid) {
-          grid.innerHTML = ALL_SERVERS.map(s => `<label class="flex items-center gap-2 p-2 hover:bg-slate-100 dark:hover:bg-slate-700 rounded-xl cursor-pointer"><input type="checkbox" value="${s}" class="dash-panel-check w-4 h-4" ${dashSettings.selectedPanels.includes(s) ? 'checked' : ''}><span class="text-[10px] font-black uppercase">${s}</span></label>`).join('');
+          grid.innerHTML = ALL_SERVERS.map(s => `<label class="flex items-center gap-2 p-2 hover:bg-slate-100 dark:hover:bg-slate-700 rounded-xl cursor-pointer"><input type="checkbox" value="${s}" class="dash-panel-check w-4 h-4" ${dashSettings.selectedPanels.includes(s) ? 'checked' : ''}><span class="text-[10px] font-black uppercase text-slate-600 dark:text-slate-300">${s}</span></label>`).join('');
           (document.getElementById('admin-phone') as HTMLInputElement).value = dashSettings.adminPhone;
         }
       });
@@ -269,10 +280,11 @@ export function installLegacyApp() {
   });
 }
 
+// Funções Extras
 window.handleAuth = async (m) => {
   const e = (document.getElementById("auth-email") as HTMLInputElement).value;
   const p = (document.getElementById("auth-password") as HTMLInputElement).value;
-  try { if (m === "login") await firebaseApi.signInWithEmailAndPassword(auth, e, p); } catch { alert("Erro de Login."); }
+  try { if (m === "login") await firebaseApi.signInWithEmailAndPassword(auth, e, p); } catch (err: any) { alert("Falha no login."); }
 };
 window.logout = () => { firebaseApi.signOut(auth); window.location.reload(); };
 window.toggleModal = (id) => document.getElementById(id)?.classList.toggle("active");
@@ -280,19 +292,6 @@ window.toggleDarkMode = () => { document.body.classList.toggle("dark-mode"); cre
 window.switchView = (v) => { document.querySelectorAll(".view-section").forEach(s => s.classList.add("hidden")); document.getElementById("view-" + v)?.classList.remove("hidden"); createIcons({ icons }); };
 window.toggleDashCustomDates = (v) => document.getElementById("dash-custom-dates")?.classList.toggle("hidden", v !== "custom");
 window.openAddClient = () => { (document.getElementById("client-edit-id") as HTMLInputElement).value = ""; (document.getElementById("client-nome") as HTMLInputElement).value = ""; window.toggleModal("client-modal"); };
-window.saveDashSettings = () => {
-  const admin = (document.getElementById('admin-phone') as HTMLInputElement).value;
-  localStorage.setItem("adminPhone", admin);
-  dashSettings.adminPhone = admin;
-  dashSettings.period = (document.getElementById('dash-setting-period') as HTMLSelectElement).value;
-  dashSettings.startDate = (document.getElementById('dash-start') as HTMLInputElement).value;
-  dashSettings.endDate = (document.getElementById('dash-end') as HTMLInputElement).value;
-  const sel: string[] = [];
-  document.querySelectorAll('.dash-panel-check:checked').forEach((el: any) => sel.push(el.value));
-  dashSettings.selectedPanels = sel;
-  window.toggleModal('dash-settings-modal');
-  refreshTopProfitBar();
-};
 window.openEditClient = (id) => {
   const c = clients.find(x => x.id === id); if (!c) return;
   (document.getElementById("client-edit-id") as HTMLInputElement).value = id;
@@ -320,5 +319,18 @@ window.saveClient = async () => {
   const path = firebaseApi.collection(db, "artifacts", appId, "users", currentUserId, "clients");
   id ? await firebaseApi.updateDoc(firebaseApi.doc(db, "artifacts", appId, "users", currentUserId, "clients", id), data) : await firebaseApi.addDoc(path, data);
   window.toggleModal("client-modal");
+};
+window.saveDashSettings = () => {
+  const admin = (document.getElementById('admin-phone') as HTMLInputElement).value;
+  localStorage.setItem("adminPhone", admin);
+  dashSettings.adminPhone = admin;
+  dashSettings.period = (document.getElementById('dash-setting-period') as HTMLSelectElement).value;
+  dashSettings.startDate = (document.getElementById('dash-start') as HTMLInputElement).value;
+  dashSettings.endDate = (document.getElementById('dash-end') as HTMLInputElement).value;
+  const sel: string[] = [];
+  document.querySelectorAll('.dash-panel-check:checked').forEach((el: any) => sel.push(el.value));
+  dashSettings.selectedPanels = sel;
+  window.toggleModal('dash-settings-modal');
+  refreshTopProfitBar();
 };
 window.openImportClients = () => window.toggleModal("import-modal");
