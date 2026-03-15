@@ -1,6 +1,5 @@
 @import "tailwindcss";
 
-/* ===== Temas ===== */
 :root {
   --bg: #f8fafc;
   --card: #ffffff;
@@ -18,15 +17,6 @@ body.dark-mode {
   --border: #334155;
 }
 
-body.midnight-mode {
-  --bg: #020617;
-  --card: #0f172a;
-  --text: #e2e8f0;
-  --muted: #64748b;
-  --border: #1e293b;
-  --accent: #6366f1;
-}
-
 body {
   margin: 0;
   font-family: system-ui, -apple-system, sans-serif;
@@ -35,25 +25,39 @@ body {
   transition: background 0.3s, color 0.3s;
 }
 
+/* ===== Inputs Corrigidos (Visibilidade em Dark Mode) ===== */
 .input-box {
   width: 100%;
-  background: rgba(0,0,0,0.05);
-  color: var(--text);
+  background: var(--bg); /* Usa a cor do fundo do tema */
+  color: var(--text); /* Texto dinâmico conforme o tema */
   border: 2px solid var(--border);
-  border-radius: 1.25rem;
-  padding: 1.05rem 1.25rem;
-  font-weight: 700;
+  border-radius: 1rem;
+  padding: 0.9rem 1rem;
+  font-weight: 600;
   outline: none;
 }
 
-.dark-mode .input-box, .midnight-mode .input-box {
-  background: rgba(255,255,255,0.05);
+.input-box:focus {
+  border-color: var(--accent);
+}
+
+.filter-select {
+  width: 100%;
+  background: var(--card);
+  color: var(--text);
+  border: 1px solid var(--border);
+  border-radius: 0.75rem;
+  padding: 0.6rem;
+  font-size: 0.75rem;
+  font-weight: 700;
+  text-transform: uppercase;
 }
 
 .luxury-card {
   background: var(--card);
   border: 1px solid var(--border);
   border-radius: 1.25rem;
+  transition: transform 0.1s;
 }
 
 .modal-overlay {
@@ -70,7 +74,12 @@ body {
 
 .modal-overlay.active { display: flex; }
 
-.view-section { animation: fadeIn 0.2s ease-out; }
-@keyframes fadeIn { from { opacity: 0; transform: translateY(5px); } to { opacity: 1; transform: translateY(0); } }
+.nav-btn {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  color: var(--muted);
+  font-weight: 800;
+}
 
 .nav-btn.active { color: var(--accent); }
