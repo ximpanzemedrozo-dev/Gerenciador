@@ -8,9 +8,7 @@ export const appHtml = `
       <div class="space-y-4">
         <input type="email" id="auth-email" placeholder="E-mail" class="input-box">
         <input type="password" id="auth-password" placeholder="Senha" class="input-box">
-        <button onclick="window.handleAuth('login')" class="w-full bg-sky-500 text-white py-4 rounded-2xl font-black uppercase tracking-widest shadow-md">
-          Entrar
-        </button>
+        <button onclick="window.handleAuth('login')" class="w-full bg-sky-500 text-white py-4 rounded-2xl font-black uppercase tracking-widest shadow-md">Aceder ao Painel</button>
       </div>
     </div>
   </section>
@@ -20,12 +18,8 @@ export const appHtml = `
       <div class="max-w-7xl mx-auto flex justify-between items-center">
         <h1 class="text-xl font-black italic tracking-tighter uppercase text-slate-800 dark:text-white">GERENCIADOR <span class="text-sky-500">INTELIGENTE</span></h1>
         <div class="flex gap-2">
-          <button onclick="window.toggleDarkMode()" class="p-2.5 rounded-xl bg-slate-50 dark:bg-slate-800 text-slate-400">
-            <i id="theme-icon" data-lucide="sun"></i>
-          </button>
-          <button onclick="window.logout()" class="p-2.5 rounded-xl bg-red-50 text-red-500 border border-red-100">
-            <i data-lucide="log-out"></i>
-          </button>
+          <button onclick="window.toggleDarkMode()" class="p-2.5 rounded-xl bg-slate-50 dark:bg-slate-800 text-slate-400"><i id="theme-icon" data-lucide="sun"></i></button>
+          <button onclick="window.logout()" class="p-2.5 rounded-xl bg-red-50 text-red-500 border border-red-100"><i data-lucide="log-out"></i></button>
         </div>
       </div>
     </header>
@@ -37,27 +31,16 @@ export const appHtml = `
         </button>
         <div class="rounded-3xl border border-slate-200 bg-white/95 dark:bg-slate-900/90 p-4 shadow-sm">
           <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
-            <div>
-              <div class="text-[10px] font-black uppercase tracking-widest text-slate-400 mb-1">Custo (Dashboard)</div>
-              <div id="top-total-casinhas" class="text-2xl font-black text-rose-500">R$ 0,00</div>
-            </div>
-            <div>
-              <div class="text-[10px] font-black uppercase tracking-widest text-slate-400 mb-1">Faturamento</div>
-              <div id="top-total-plans" class="text-2xl font-black text-slate-900 dark:text-white">R$ 0,00</div>
-            </div>
-            <div>
-              <div class="text-[10px] font-black uppercase tracking-widest text-slate-400 mb-1">Lucro Líquido</div>
-              <div id="top-real-profit" class="text-2xl font-black text-emerald-600">R$ 0,00</div>
-            </div>
+            <div><div class="text-[10px] font-black uppercase text-slate-400 mb-1">Custo Total</div><div id="top-total-casinhas" class="text-2xl font-black text-rose-500">R$ 0,00</div></div>
+            <div><div class="text-[10px] font-black uppercase text-slate-400 mb-1">Faturamento</div><div id="top-total-plans" class="text-2xl font-black text-slate-900 dark:text-white">R$ 0,00</div></div>
+            <div><div class="text-[10px] font-black uppercase text-slate-400 mb-1">Lucro Real</div><div id="top-real-profit" class="text-2xl font-black text-emerald-600">R$ 0,00</div></div>
           </div>
-          <div id="dash-info-text" class="text-[9px] font-bold uppercase text-slate-400 mt-2 border-t pt-2 dark:border-slate-800">
-            Filtrando: Mensais do Mês Atual (Todos Painéis)
-          </div>
+          <div id="dash-info-text" class="text-[9px] font-bold uppercase text-slate-400 mt-2 border-t pt-2 dark:border-slate-800">Filtrando: Mensais do Mês Atual</div>
         </div>
       </div>
     </div>
 
-    <main id="app-main" class="max-w-7xl mx-auto px-4 pt-64 pb-32">
+    <main id="app-main" class="max-w-7xl mx-auto px-4 pt-72 pb-32">
       <section id="view-clients" class="view-section">
         <div class="flex flex-col gap-3 md:flex-row md:justify-between md:items-center mb-6">
           <h2 class="text-2xl font-black italic uppercase tracking-tighter text-slate-800 dark:text-white">Clientes (<span id="clients-count">0/0</span>)</h2>
@@ -70,32 +53,8 @@ export const appHtml = `
 
         <div class="rounded-2xl border border-slate-200 bg-white dark:bg-slate-900 p-4 mb-6 space-y-4 shadow-sm">
           <div class="grid grid-cols-2 md:grid-cols-4 gap-3">
-            <select id="clients-filter-server" class="filter-select">
-              <option value="">Painéis</option>
-              <option value="Starplay">Starplay</option>
-              <option value="Vision">Vision</option>
-              <option value="Primelux">Primelux</option>
-              <option value="Play Tv">Play Tv</option>
-              <option value="Blast Elite">Blast Elite</option>
-              <option value="Blast Flash">Blast Flash</option>
-              <option value="Havok Radeon">Havok Radeon</option>
-              <option value="Havok Kyros">Havok Kyros</option>
-              <option value="Havok Andromeda">Havok Andromeda</option>
-              <option value="Havok Neon">Havok Neon</option>
-              <option value="Allbox">Allbox</option>
-              <option value="Ryzeen">Ryzeen</option>
-              <option value="Titan">Titan</option>
-            </select>
-            <select id="clients-filter-cycle" class="filter-select">
-              <option value="">Ciclos</option>
-              <option value="mensal">Mensal</option>
-              <option value="bimestral">Bimestral</option>
-              <option value="trimestral">Trimestral</option>
-              <option value="quadrimestral">Quadrimestral</option>
-              <option value="quintomestral">Quintomestral</option>
-              <option value="semestral">Semestral</option>
-              <option value="anual">Anual</option>
-            </select>
+            <select id="clients-filter-server" class="filter-select"><option value="">Painéis</option><option value="Starplay">Starplay</option><option value="Vision">Vision</option></select>
+            <select id="clients-filter-cycle" class="filter-select"><option value="">Ciclos</option><option value="mensal">Mensal</option><option value="trimestral">Trimestral</option><option value="anual">Anual</option></select>
             <div class="flex flex-col gap-1">
               <label class="text-[8px] font-bold text-slate-400 uppercase ml-1">Venc. De</label>
               <input type="date" id="filter-date-start" class="filter-select h-10" />
@@ -105,17 +64,14 @@ export const appHtml = `
               <input type="date" id="filter-date-end" class="filter-select h-10" />
             </div>
           </div>
-          <div class="relative">
-            <i data-lucide="search" class="absolute left-4 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400"></i>
-            <input id="clients-search" class="input-box pl-11 py-3" placeholder="Procurar nome, login, ID..." />
-          </div>
+          <div class="relative"><i data-lucide="search" class="absolute left-4 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400"></i><input id="clients-search" class="input-box pl-11 py-3" placeholder="Procurar nome, login, ID..." /></div>
         </div>
 
         <div id="clients-list" class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4"></div>
 
         <div id="clients-bulkbar" class="hidden fixed bottom-24 left-0 right-0 px-4 z-[60]">
           <div class="max-w-7xl mx-auto rounded-2xl border border-slate-200 bg-white dark:bg-slate-900 shadow-2xl p-4 flex justify-between items-center">
-            <span class="text-xs font-black uppercase text-slate-800 dark:text-white">Itens: <span id="clients-bulk-count" class="text-sky-500">0</span></span>
+            <span class="text-xs font-black uppercase">Itens: <span id="clients-bulk-count" class="text-sky-500">0</span></span>
             <div class="flex gap-2">
               <button onclick="window.bulkSelectAllFilteredClients()" class="bg-slate-900 text-white px-3 py-2 rounded-xl text-[10px] font-black uppercase">Todos</button>
               <button onclick="window.bulkDeleteSelectedClients()" class="bg-red-600 text-white px-3 py-2 rounded-xl text-[10px] font-black uppercase">Apagar</button>
@@ -124,14 +80,9 @@ export const appHtml = `
           </div>
         </div>
       </section>
-
-      <section id="view-finance" class="view-section hidden">
-        <h2 class="text-2xl font-black uppercase mb-4 text-slate-800 dark:text-white">Financeiro</h2>
-        <div id="fin-breakdown" class="bg-white dark:bg-slate-900 p-6 rounded-3xl border border-slate-200 dark:border-slate-800 space-y-3 shadow-sm"></div>
-      </section>
     </main>
 
-    <nav class="fixed bottom-0 left-0 right-0 bg-white/95 dark:bg-slate-950/95 border-t dark:border-slate-800 h-20 flex justify-around items-center px-4 z-50 shadow-2xl">
+    <nav class="fixed bottom-0 left-0 right-0 bg-white/95 dark:bg-slate-950/95 border-t dark:border-slate-800 h-20 flex justify-around items-center px-4 z-50">
       <button onclick="window.switchView('clients')" id="nav-clients" class="nav-btn active"><i data-lucide="users"></i><span>Clientes</span></button>
       <button onclick="window.switchView('finance')" id="nav-finance" class="nav-btn"><i data-lucide="wallet"></i><span>Ganhos</span></button>
     </nav>
@@ -170,9 +121,7 @@ export const appHtml = `
         <div><label class="text-[10px] font-black uppercase text-slate-400 mb-1 block">Nome</label><input id="client-nome" class="input-box" /></div>
         <div><label class="text-[10px] font-black uppercase text-slate-400 mb-1 block">Servidor</label>
           <select id="client-painel" class="filter-select p-3 h-[52px]">
-            <option value="Starplay">Starplay</option><option value="Vision">Vision</option>
-            <option value="Primelux">Primelux</option><option value="Blast Elite">Blast Elite</option>
-            <option value="Havok Radeon">Havok Radeon</option>
+            <option value="Starplay">Starplay</option><option value="Vision">Vision</option><option value="Primelux">Primelux</option><option value="Blast Elite">Blast Elite</option>
           </select>
         </div>
         <div><label class="text-[10px] font-black uppercase text-slate-400 mb-1 block">Ciclo</label>
@@ -190,7 +139,7 @@ export const appHtml = `
 
   <div id="import-modal" class="modal-overlay" onclick="window.toggleModal('import-modal')">
     <div class="bg-white dark:bg-slate-900 w-full max-w-2xl rounded-[2.5rem] p-6 shadow-3xl" onclick="event.stopPropagation()">
-      <h2 class="text-2xl font-black uppercase text-sky-600 mb-6">Importação</h2>
+      <h2 class="text-2xl font-black italic uppercase text-sky-600 mb-6">Importar</h2>
       <textarea id="import-text" class="w-full h-48 border dark:border-slate-700 rounded-2xl p-4 font-mono text-[10px] mb-4 outline-none dark:bg-slate-800" placeholder="Cole o texto aqui..."></textarea>
       <div class="grid grid-cols-2 gap-3">
         <button onclick="window.importClientsFromText()" class="bg-emerald-600 text-white py-3 rounded-xl font-black uppercase text-[10px]">Importar Tudo</button>
