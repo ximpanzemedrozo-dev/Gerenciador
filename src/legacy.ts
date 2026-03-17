@@ -8,14 +8,14 @@ let clients: Client[] = [];
 let bulkMode = false;
 let selectedClientIds = new Set<string>();
 
-// SUA CHAVE API INCORPORADA DIRETAMENTE
 const GEMINI_API_KEY = "AIzaSyDLzEsQYgzFagRKo_IoVRC680X5dnWSQHI";
-
 const ALL_SERVERS = ["Starplay", "Vision", "Primelux", "Play Tv", "Blast Elite", "Blast Flash", "Havok Radeon", "Havok Kyros", "Havok Andromeda", "Havok Neon", "Allbox", "Ryzeen", "Titan"];
+
 let dashSettings = { 
   period: 'current_month', startDate: '', endDate: '', 
   selectedPanels: [...ALL_SERVERS],
-  adminPhone: localStorage.getItem("adminPhone") || ""
+  adminPhone: localStorage.getItem("adminPhone") || "",
+  apiIAKey: GEMINI_API_KEY
 };
 
 declare global {
@@ -44,51 +44,38 @@ declare global {
 const money = (n: number) => "R$ " + n.toLocaleString("pt-BR", { minimumFractionDigits: 2 });
 const parseNum = (s: string) => { const v = String(s).replace(/\s/g, "").replace(",", "."); const n = parseFloat(v); return isNaN(n) ? 0 : n; };
 
-// 1. IMPORTAÇÃO COM IA (GEMINI) - CONFIGURADA COM SUA CHAVE
+// 1. IMPORTAÇÃO COM IA (CORRIGIDA)
 window.importClientsWithAI = async () => {
   const text = (document.getElementById("import-text") as HTMLTextAreaElement).value;
-  if (!text) return alert("Cole o texto do painel primeiro!");
+  if (!text) return alert("Cole o texto primeiro!");
 
   const btn = document.querySelector('button[onclick*="importClientsWithAI"]') as HTMLButtonElement;
-  btn.disabled = true; btn.textContent = "IA PROCESSANDO... 🧠";
+  btn.disabled = true; btn.textContent = "IA LENDO... 🧠";
 
   try {
-    const prompt = `Analise este texto de painel IPTV e extraia os dados dos clientes. 
-    Retorne APENAS um array JSON puro. Campos obrigatórios por objeto: 
-    "nome" (nome do cliente), 
-    "idExt" (ID de 7 dígitos que aparece no início do bloco), 
-    "vencimento" (data em formato AAAA-MM-DD), 
-    "plano" (apenas o número do valor, ex: 30),
-    "painel" (o nome do servidor como KYROS, VISION, etc).
-    
-    Texto bruto: ${text}`;
-
-    const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${GEMINI_API_KEY}`, {
+    const prompt = `Analise o texto e retorne APENAS um array JSON. Campos por objeto: "nome", "idExt" (7 digitos no inicio do bloco), "vencimento" (AAAA-MM-DD), "plano" (numero), "painel" (KYROS, VISION, etc). Texto: ${text}`;
+    // URL ESTÁVEL v1
+    const response = await fetch(`https://generativelanguage.googleapis.com/v1/models/gemini-1.5-flash:generateContent?key=${GEMINI_API_KEY}`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ contents: [{ parts: [{ text: prompt }] }] })
     });
 
     const result = await response.json();
+    if (!result.candidates) throw new Error("IA não retornou dados.");
+    
     const rawJson = result.candidates[0].content.parts[0].text.replace(/\`\`\`json|\`\`\`/g, '').trim();
     const parsedData = JSON.parse(rawJson);
 
-    let count = 0;
     for (let c of parsedData) {
       await firebaseApi.addDoc(firebaseApi.collection(db, "artifacts", appId, "users", currentUserId!, "clients"), {
-        nome: c.nome, 
-        idExt: String(c.idExt), 
-        venc: c.vencimento, 
-        plano: Number(c.plano) || 30, 
-        painel: c.painel || "Importado IA", 
-        createdAt: new Date().toISOString()
+        nome: c.nome, idExt: String(c.idExt), venc: c.vencimento, plano: Number(c.plano) || 30, painel: c.painel || "Importado IA", createdAt: new Date().toISOString()
       });
-      count++;
     }
-    alert(`${count} clientes identificados e importados pela IA!`);
+    alert(`${parsedData.length} importados!`);
     window.toggleModal("import-modal");
   } catch (err) {
-    alert("Falha na IA. Verifique se o texto está no formato correto.");
+    alert("IA falhou. Use a importação padrão.");
     console.error(err);
   } finally {
     btn.disabled = false; btn.textContent = "Limpar e Importar c/ IA ✨";
@@ -103,22 +90,17 @@ function checkAndNotify() {
   const upcoming = clients.filter(c => c.venc === todayStr || c.venc === tomStr);
   const badge = document.getElementById("notif-badge");
   const listCont = document.getElementById("notif-list");
-  
   if (upcoming.length > 0) {
     badge?.classList.remove("hidden");
-    if (listCont) {
-      listCont.innerHTML = upcoming.map(c => `
-        <div class="p-4 rounded-2xl ${c.venc === todayStr ? 'bg-rose-50 border-rose-100' : 'bg-sky-50 border-sky-100'} dark:bg-slate-800 border flex justify-between items-center">
-          <div>
-            <div class="text-[9px] font-black uppercase ${c.venc === todayStr ? 'text-rose-500' : 'text-sky-500'}">${c.venc === todayStr ? 'Vence Hoje' : 'Vence Amanhã'}</div>
-            <div class="text-xs font-bold text-slate-800 dark:text-white uppercase">${c.nome}</div>
-          </div>
-          <button onclick="window.sendWhatsApp('${c.id}')" class="p-2.5 bg-emerald-500 text-white rounded-xl"><i data-lucide="message-circle" class="w-4 h-4"></i></button>
-        </div>`).join('');
-    }
+    if (listCont) listCont.innerHTML = upcoming.map(c => `
+      <div class="p-4 rounded-2xl ${c.venc === todayStr ? 'bg-rose-50 border-rose-100' : 'bg-sky-50 border-sky-100'} dark:bg-slate-800 border flex justify-between items-center">
+        <div><div class="text-[9px] font-black uppercase ${c.venc === todayStr ? 'text-rose-500' : 'text-sky-500'}">${c.venc === todayStr ? 'Vence Hoje' : 'Vence Amanhã'}</div>
+        <div class="text-xs font-bold text-slate-800 dark:text-white uppercase">${c.nome}</div></div>
+        <button onclick="window.sendWhatsApp('${c.id}')" class="p-2.5 bg-emerald-500 text-white rounded-xl"><i data-lucide="message-circle" class="w-4 h-4"></i></button>
+      </div>`).join('');
   } else {
     badge?.classList.add("hidden");
-    if (listCont) listCont.innerHTML = `<p class="text-xs text-slate-400 text-center py-8">Tudo em ordem!</p>`;
+    if (listCont) listCont.innerHTML = `<p class="text-xs text-slate-400 text-center py-8">Tudo ok!</p>`;
   }
   createIcons({ icons });
 }
@@ -127,7 +109,7 @@ window.sendWhatsApp = (id) => {
   const c = clients.find(x => x.id === id); if (!c) return;
   const admin = dashSettings.adminPhone.replace(/\D/g, "");
   if (!admin) return alert("Configure seu WhatsApp na engrenagem!");
-  const msg = `⚠️ *AVISO*\n\n👤 *Cliente:* ${c.nome}\n🖥️ *Painel:* ${c.painel}\n📅 *Data:* ${c.venc?.split("-").reverse().join("/")}\n💰 *Valor:* ${money(c.plano || 0)}\n📱 *ID:* ${c.idExt || 'N/A'}`;
+  const msg = `⚠️ *AVISO*\n\n👤 *Cliente:* ${c.nome}\n🖥️ *Painel:* ${c.painel}\n📅 *Vencimento:* ${c.venc?.split("-").reverse().join("/")}\n💰 *Valor:* ${money(c.plano || 0)}\n📱 *Whats:* ${c.phone || 'N/A'}`;
   window.open(`https://wa.me/${admin}?text=${encodeURIComponent(msg)}`, "_blank");
 };
 
@@ -137,58 +119,53 @@ function refreshTopProfitBar() {
   const totalCasinhasEl = document.getElementById("top-total-casinhas");
   const realProfitEl = document.getElementById("top-real-profit");
   if (!totalPlansEl || !totalCasinhasEl || !realProfitEl) return;
-
   const now = new Date();
   const dashList = clients.filter(c => {
     if (!dashSettings.selectedPanels.includes(c.painel || '')) return false;
     if (!c.venc) return false;
     const d = new Date(c.venc + "T00:00:00");
-    if (dashSettings.period === 'current_month') {
-      return d.getMonth() === now.getMonth() && d.getFullYear() === now.getFullYear();
-    } else if (dashSettings.period === 'custom') {
-      const start = dashSettings.startDate ? new Date(dashSettings.startDate + "T00:00:00") : null;
-      const end = dashSettings.endDate ? new Date(dashSettings.endDate + "T23:59:59") : null;
-      if (start && d < start) return false;
-      if (end && d > end) return false;
+    if (dashSettings.period === 'current_month') return d.getMonth() === now.getMonth() && d.getFullYear() === now.getFullYear();
+    if (dashSettings.period === 'custom') {
+      const s = dashSettings.startDate ? new Date(dashSettings.startDate + "T00:00:00") : null;
+      const e = dashSettings.endDate ? new Date(dashSettings.endDate + "T23:59:59") : null;
+      if (s && d < s) return false; if (e && d > e) return false;
     }
     return true;
   });
-
-  const faturamento = dashList.reduce((acc, c) => acc + (Number(c.plano) || 0), 0);
-  const custo = dashList.reduce((acc, c) => {
-    const p = (c.painel || "").trim().toUpperCase();
+  const fat = dashList.reduce((acc, c) => acc + (Number(c.plano) || 0), 0);
+  const cus = dashList.reduce((acc, c) => {
+    const p = (c.painel || "").toUpperCase();
     if (p.includes("STARPLAY")) return acc + 2.50;
     if (p.includes("VISION")) return acc + 2.00;
     return acc;
   }, 0);
-
-  totalPlansEl.textContent = money(faturamento);
-  totalCasinhasEl.textContent = money(custo);
-  realProfitEl.textContent = money(faturamento - custo);
+  totalPlansEl.textContent = money(fat); totalCasinhasEl.textContent = money(cus); realProfitEl.textContent = money(fat - cus);
 }
 
-function renderClientsList() {
-  const cont = document.getElementById("clients-list"); if (!cont) return;
+// 4. RENDERS E FILTROS
+function getFilteredClients() {
   const q = (document.getElementById("clients-search") as HTMLInputElement)?.value.toLowerCase();
   const ds = (document.getElementById("filter-date-start") as HTMLInputElement)?.value;
   const de = (document.getElementById("filter-date-end") as HTMLInputElement)?.value;
   const srv = (document.getElementById("clients-filter-server") as HTMLSelectElement)?.value;
-
-  const filtered = clients.filter(c => {
+  return clients.filter(c => {
     if (srv && c.painel !== srv) return false;
     if (ds && c.venc && c.venc < ds) return false;
     if (de && c.venc && c.venc > de) return false;
     if (!q) return true;
     return c.nome?.toLowerCase().includes(q) || c.idExt?.toLowerCase().includes(q) || c.painel?.toLowerCase().includes(q);
   });
+}
 
+function renderClientsList() {
+  const cont = document.getElementById("clients-list"); if (!cont) return;
+  const filtered = getFilteredClients();
   document.getElementById("clients-count")!.textContent = `${filtered.length}/${clients.length}`;
   cont.innerHTML = "";
   filtered.forEach(c => {
     const isSel = selectedClientIds.has(c.id);
     const div = document.createElement("div");
     div.className = `luxury-card p-5 border transition-all cursor-pointer ${isSel ? 'ring-2 ring-sky-500 bg-sky-50/20' : 'border-slate-200 dark:border-slate-800 shadow-sm'}`;
-    
     div.innerHTML = `
       <div class="flex justify-between items-start">
         <div class="min-w-0 flex items-center gap-3">
@@ -200,26 +177,18 @@ function renderClientsList() {
             <div class="text-[11px] font-black text-sky-600 mt-2">${money(c.plano || 0)}</div>
           </div>
         </div>
-        ${!bulkMode ? `
-          <div class="flex flex-col gap-2">
+        ${!bulkMode ? `<div class="flex flex-col gap-2">
             <button onclick="event.stopPropagation(); window.openEditClient('${c.id}')" class="p-2 bg-slate-100 dark:bg-slate-800 rounded-xl text-slate-500"><i data-lucide="edit-3" class="w-4 h-4"></i></button>
             <button onclick="event.stopPropagation(); window.deleteClient('${c.id}')" class="p-2 bg-red-50 rounded-xl text-red-500"><i data-lucide="trash-2" class="w-4 h-4"></i></button>
           </div>` : ''}
       </div>`;
-
-    div.onclick = () => {
-      if (bulkMode) {
-        isSel ? selectedClientIds.delete(c.id) : selectedClientIds.add(c.id);
-        document.getElementById("clients-bulk-count")!.textContent = String(selectedClientIds.size);
-        renderClientsList();
-      }
-    };
+    div.onclick = () => { if (bulkMode) { isSel ? selectedClientIds.delete(c.id) : selectedClientIds.add(c.id); renderClientsList(); } };
     cont.appendChild(div);
   });
   createIcons({ icons });
 }
 
-// 4. INICIALIZAÇÃO E CRUD
+// 5. INICIALIZAÇÃO
 export function installLegacyApp() {
   firebaseApi.onAuthStateChanged(auth, (user) => {
     if (user) {
@@ -229,19 +198,49 @@ export function installLegacyApp() {
       firebaseApi.onSnapshot(firebaseApi.collection(db, "artifacts", appId, "users", user.uid, "clients"), snap => {
         clients = snap.docs.map(d => ({ id: d.id, ...d.data() })) as Client[]; 
         refreshTopProfitBar(); checkAndNotify(); renderClientsList();
+        
         const grid = document.getElementById('dash-server-checkboxes');
         if (grid) {
-          grid.innerHTML = ALL_SERVERS.map(s => `<label class="flex items-center gap-2 p-2 hover:bg-slate-100 dark:hover:bg-slate-700 rounded-xl cursor-pointer"><input type="checkbox" value="${s}" class="dash-panel-check w-4 h-4" ${dashSettings.selectedPanels.includes(s) ? 'checked' : ''}><span class="text-[10px] font-black uppercase text-slate-600 dark:text-slate-300">${s}</span></label>`).join('');
-          (document.getElementById('admin-phone') as HTMLInputElement).value = dashSettings.adminPhone;
+          grid.innerHTML = ALL_SERVERS.map(s => `<label class="flex items-center gap-2 p-2 hover:bg-slate-100 dark:hover:bg-slate-700 rounded-xl cursor-pointer"><input type="checkbox" value="${s}" class="dash-panel-check w-4 h-4" ${dashSettings.selectedPanels.includes(s) ? 'checked' : ''}><span class="text-[10px] font-black uppercase">${s}</span></label>`).join('');
+          const admInput = document.getElementById('admin-phone') as HTMLInputElement;
+          const keyInput = document.getElementById('api-ia-key') as HTMLInputElement;
+          if(admInput) admInput.value = dashSettings.adminPhone;
+          if(keyInput) keyInput.value = dashSettings.apiIAKey;
         }
       });
       document.querySelectorAll('#clients-search, #filter-date-start, #filter-date-end').forEach(el => el.addEventListener('input', renderClientsList));
+      document.querySelectorAll('#clients-filter-server, #clients-filter-cycle').forEach(el => el.addEventListener('change', renderClientsList));
       window.switchView("clients");
     }
   });
 }
 
-// CRUD e Auxiliares
+// Funções Extras (Save, Logout, Modal)
+window.saveDashSettings = () => {
+  const admin = (document.getElementById('admin-phone') as HTMLInputElement).value;
+  localStorage.setItem("adminPhone", admin); dashSettings.adminPhone = admin;
+  dashSettings.period = (document.getElementById('dash-setting-period') as HTMLSelectElement).value;
+  dashSettings.startDate = (document.getElementById('dash-start') as HTMLInputElement).value;
+  dashSettings.endDate = (document.getElementById('dash-end') as HTMLInputElement).value;
+  const sel: string[] = []; document.querySelectorAll('.dash-panel-check:checked').forEach((el: any) => sel.push(el.value));
+  dashSettings.selectedPanels = sel; window.toggleModal('dash-settings-modal'); refreshTopProfitBar();
+};
+window.logout = () => { firebaseApi.signOut(auth); window.location.reload(); };
+window.toggleModal = (id) => document.getElementById(id)?.classList.toggle("active");
+window.toggleDarkMode = () => { document.body.classList.toggle("dark-mode"); createIcons({ icons }); };
+window.switchView = (v) => { document.querySelectorAll(".view-section").forEach(s => s.classList.add("hidden")); document.getElementById("view-" + v)?.classList.remove("hidden"); createIcons({ icons }); };
+window.toggleDashCustomDates = (v) => document.getElementById("dash-custom-dates")?.classList.toggle("hidden", v !== "custom");
+window.openAddClient = () => { (document.getElementById("client-edit-id") as HTMLInputElement).value = ""; (document.getElementById("client-nome") as HTMLInputElement).value = ""; window.toggleModal("client-modal"); };
+window.openEditClient = (id) => {
+  const c = clients.find(x => x.id === id); if (!c) return;
+  (document.getElementById("client-edit-id") as HTMLInputElement).value = id;
+  (document.getElementById("client-nome") as HTMLInputElement).value = c.nome || "";
+  (document.getElementById("client-venc") as HTMLInputElement).value = c.venc || "";
+  (document.getElementById("client-plano") as HTMLInputElement).value = (c.plano || 0).toLocaleString("pt-BR", { minimumFractionDigits: 2 });
+  (document.getElementById("client-phone") as HTMLInputElement).value = c.phone || "";
+  (document.getElementById("client-idext") as HTMLInputElement).value = c.idExt || "";
+  window.toggleModal("client-modal");
+};
 window.saveClient = async () => {
   if (!currentUserId) return;
   const id = (document.getElementById("client-edit-id") as HTMLInputElement).value;
@@ -258,45 +257,14 @@ window.saveClient = async () => {
   id ? await firebaseApi.updateDoc(firebaseApi.doc(db, "artifacts", appId, "users", currentUserId, "clients", id), data) : await firebaseApi.addDoc(path, data);
   window.toggleModal("client-modal");
 };
-
-window.handleAuth = async (m) => {
-  const e = (document.getElementById("auth-email") as HTMLInputElement).value;
-  const p = (document.getElementById("auth-password") as HTMLInputElement).value;
-  try { if (m === "login") await firebaseApi.signInWithEmailAndPassword(auth, e, p); } catch { alert("Erro."); }
-};
-window.logout = () => { firebaseApi.signOut(auth); window.location.reload(); };
-window.toggleModal = (id) => document.getElementById(id)?.classList.toggle("active");
-window.toggleDarkMode = () => { document.body.classList.toggle("dark-mode"); createIcons({ icons }); };
-window.switchView = (v) => { document.querySelectorAll(".view-section").forEach(s => s.classList.add("hidden")); document.getElementById("view-" + v)?.classList.remove("hidden"); createIcons({ icons }); };
-window.toggleDashCustomDates = (v) => document.getElementById("dash-custom-dates")?.classList.toggle("hidden", v !== "custom");
-window.openAddClient = () => { (document.getElementById("client-edit-id") as HTMLInputElement).value = ""; (document.getElementById("client-nome") as HTMLInputElement).value = ""; window.toggleModal("client-modal"); };
-window.openEditClient = (id) => {
-  const c = clients.find(x => x.id === id); if (!c) return;
-  (document.getElementById("client-edit-id") as HTMLInputElement).value = id;
-  (document.getElementById("client-nome") as HTMLInputElement).value = c.nome || "";
-  (document.getElementById("client-painel") as HTMLSelectElement).value = c.painel || "Starplay";
-  (document.getElementById("client-venc") as HTMLInputElement).value = c.venc || "";
-  (document.getElementById("client-plano") as HTMLInputElement).value = (c.plano || 0).toLocaleString("pt-BR", { minimumFractionDigits: 2 });
-  (document.getElementById("client-phone") as HTMLInputElement).value = c.phone || "";
-  (document.getElementById("client-idext") as HTMLInputElement).value = c.idExt || "";
-  window.toggleModal("client-modal");
-};
 window.deleteClient = async (id) => { if (confirm("Excluir?")) await firebaseApi.deleteDoc(firebaseApi.doc(db, "artifacts", appId, "users", currentUserId!, "clients", id)); };
 window.toggleBulkSelectClients = (f) => { bulkMode = f ?? !bulkMode; selectedClientIds.clear(); document.getElementById("clients-bulkbar")?.classList.toggle("hidden", !bulkMode); renderClientsList(); };
 window.bulkSelectAllFilteredClients = () => { getFilteredClients().forEach(c => selectedClientIds.add(c.id)); renderClientsList(); };
-window.bulkDeleteSelectedClients = async () => { if (confirm(`Excluir ${selectedClientIds.size} selecionados?`)) { for (const id of selectedClientIds) await firebaseApi.deleteDoc(firebaseApi.doc(db, "artifacts", appId, "users", currentUserId!, "clients", id)); window.toggleBulkSelectClients(false); } };
-window.saveDashSettings = () => {
-  const admin = (document.getElementById('admin-phone') as HTMLInputElement).value;
-  localStorage.setItem("adminPhone", admin);
-  dashSettings.adminPhone = admin;
-  dashSettings.period = (document.getElementById('dash-setting-period') as HTMLSelectElement).value;
-  dashSettings.startDate = (document.getElementById('dash-start') as HTMLInputElement).value;
-  dashSettings.endDate = (document.getElementById('dash-end') as HTMLInputElement).value;
-  const sel: string[] = [];
-  document.querySelectorAll('.dash-panel-check:checked').forEach((el: any) => sel.push(el.value));
-  dashSettings.selectedPanels = sel;
-  window.toggleModal('dash-settings-modal');
-  refreshTopProfitBar();
-};
+window.bulkDeleteSelectedClients = async () => { if (confirm(`Excluir ${selectedClientIds.size}?`)) { for (const id of selectedClientIds) await firebaseApi.deleteDoc(firebaseApi.doc(db, "artifacts", appId, "users", currentUserId!, "clients", id)); window.toggleBulkSelectClients(false); } };
 window.openImportClients = () => window.toggleModal("import-modal");
-window.importClientsFromText = async () => { alert("Use o botão de IA ✨ para importar o novo formato!"); };
+window.importClientsFromText = async () => { alert("Use o botão ✨ IA para este formato!"); };
+window.handleAuth = async (m) => {
+  const e = (document.getElementById("auth-email") as HTMLInputElement).value;
+  const p = (document.getElementById("auth-password") as HTMLInputElement).value;
+  try { if (m === "login") await firebaseApi.signInWithEmailAndPassword(auth, e, p); } catch (err: any) { alert("Login Falhou."); }
+};
