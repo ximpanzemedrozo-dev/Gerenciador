@@ -8,7 +8,6 @@ let clients: Client[] = [];
 let bulkMode = false;
 let selectedClientIds = new Set<string>();
 
-// CHAVE ATIVA: AIzaSyDLzEsQYgzFagRKo_IoVRC680X5dnWSQHI
 const GEMINI_API_KEY = "AIzaSyDLzEsQYgzFagRKo_IoVRC680X5dnWSQHI";
 const ALL_SERVERS = ["Starplay", "Vision", "Primelux", "Play Tv", "Blast Elite", "Blast Flash", "Havok Radeon", "Havok Kyros", "Havok Andromeda", "Havok Neon", "Allbox", "Ryzeen", "Titan"];
 
@@ -43,31 +42,28 @@ declare global {
 const money = (n: number) => "R$ " + n.toLocaleString("pt-BR", { minimumFractionDigits: 2 });
 const parseNum = (s: string) => { const v = String(s).replace(/\s/g, "").replace(",", "."); const n = parseFloat(v); return isNaN(n) ? 0 : n; };
 
-// 1. IMPORTAÇÃO COM IA (CORREÇÃO URL v1beta PARA EVITAR 404)
+// 1. IMPORTAÇÃO COM IA
 window.importClientsWithAI = async () => {
   const text = (document.getElementById("import-text") as HTMLTextAreaElement).value;
   if (!text) return alert("Cole o texto primeiro!");
 
   const btn = document.querySelector('button[onclick*="importClientsWithAI"]') as HTMLButtonElement;
-  btn.disabled = true; btn.textContent = "PROCESSANDO... 🧠";
+  btn.disabled = true; btn.textContent = "IA PROCESSANDO... 🧠";
 
   try {
-    const prompt = `Extraia os clientes deste texto e retorne APENAS um array JSON puro. 
-    Campos por objeto: "nome", "idExt" (ID de 7 dígitos), "vencimento" (AAAA-MM-DD), "plano" (número), "painel" (KYROS, VISION, etc). 
-    Texto: ${text}`;
+    const prompt = `Extraia os clientes deste texto e retorne APENAS um array JSON puro. Campos por objeto: "nome", "idExt" (ID de 7 dígitos), "vencimento" (AAAA-MM-DD), "plano" (número), "painel" (KYROS, VISION, etc). Texto: ${text}`;
 
-    // URL v1beta RESOLVE O ERRO 404
-    const response = await fetch(\`https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=\${GEMINI_API_KEY}\`, {
+    const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${GEMINI_API_KEY}`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ contents: [{ parts: [{ text: prompt }] }] })
     });
 
     const result = await response.json();
-    if (!result.candidates || !result.candidates[0].content.parts[0].text) throw new Error("Sem resposta da IA.");
+    if (!result.candidates || !result.candidates[0].content.parts[0].text) throw new Error("Sem resposta.");
 
     let rawJson = result.candidates[0].content.parts[0].text;
-    rawJson = rawJson.replace(/\`\`\`json/g, "").replace(/\`\`\`/g, "").trim();
+    rawJson = rawJson.replace(/\\\`\\\`\\\`json/g, "").replace(/\\\`\\\`\\\`/g, "").trim();
     const parsedData = JSON.parse(rawJson);
 
     for (let c of parsedData) {
@@ -75,11 +71,10 @@ window.importClientsWithAI = async () => {
         nome: c.nome, idExt: String(c.idExt), venc: c.vencimento, plano: Number(c.plano) || 30, painel: c.painel || "Importado IA", createdAt: new Date().toISOString()
       });
     }
-    alert(\`\${parsedData.length} clientes importados pela IA!\`);
+    alert(`${parsedData.length} importados!`);
     window.toggleModal("import-modal");
   } catch (err) {
-    alert("Erro na IA. Tente novamente ou use a importação manual.");
-    console.error("ERRO IA:", err);
+    alert("Falha ao processar com IA.");
   } finally {
     btn.disabled = false; btn.textContent = "Limpar e Importar c/ IA ✨";
   }
@@ -97,16 +92,15 @@ function checkAndNotify() {
     badge?.classList.remove("hidden");
     if (listCont) {
       listCont.innerHTML = upcoming.map(c => `
-        <div class="p-4 rounded-2xl \${c.venc === todayStr ? 'bg-rose-50 border-rose-100' : 'bg-sky-50 border-sky-100'} dark:bg-slate-800 border flex justify-between items-center">
-          <div><div class="text-[9px] font-black uppercase \${c.venc === todayStr ? 'text-rose-500' : 'text-sky-500'}">\${c.venc === todayStr ? 'Vence Hoje' : 'Vence Amanhã'}</div>
-          <div class="text-xs font-bold text-slate-800 dark:text-white uppercase">\${c.nome}</div></div>
-          <button onclick="window.sendWhatsApp('\${c.id}')" class="p-2.5 bg-emerald-500 text-white rounded-xl"><i data-lucide="message-circle" class="w-4 h-4"></i></button>
-        </div>\`).join('');
+        <div class="p-4 rounded-2xl ${c.venc === todayStr ? 'bg-rose-50 border-rose-100' : 'bg-sky-50 border-sky-100'} dark:bg-slate-800 border flex justify-between items-center">
+          <div><div class="text-[9px] font-black uppercase ${c.venc === todayStr ? 'text-rose-500' : 'text-sky-500'}">${c.venc === todayStr ? 'Vence Hoje' : 'Vence Amanhã'}</div>
+          <div class="text-xs font-bold text-slate-800 dark:text-white uppercase">${c.nome}</div></div>
+          <button onclick="window.sendWhatsApp('${c.id}')" class="p-2.5 bg-emerald-500 text-white rounded-xl"><i data-lucide="message-circle" class="w-4 h-4"></i></button>
+        </div>`).join('');
     }
-    if (Notification.permission === "granted") new Notification("Vencimentos!", { body: "Você tem renovações hoje/amanhã." });
   } else {
     badge?.classList.add("hidden");
-    if (listCont) listCont.innerHTML = \`<p class="text-xs text-slate-400 text-center py-8">Tudo em dia!</p>\`;
+    if (listCont) listCont.innerHTML = `<p class="text-xs text-slate-400 text-center py-8">Tudo ok!</p>`;
   }
   createIcons({ icons });
 }
@@ -115,11 +109,11 @@ window.sendWhatsApp = (id) => {
   const c = clients.find(x => x.id === id); if (!c) return;
   const admin = dashSettings.adminPhone.replace(/\D/g, "");
   if (!admin) return alert("Configure seu WhatsApp!");
-  const msg = \`⚠️ *AVISO*\\n\\n👤 *Cliente:* \${c.nome}\\n🖥️ *Painel:* \${c.painel}\\n📅 *Vencimento:* \${c.venc?.split("-").reverse().join("/")}\\n💰 *Valor:* \${money(c.plano || 0)}\\n📱 *ID:* \${c.idExt || 'N/A'}\`;
-  window.open(\`https://wa.me/\${admin}?text=\${encodeURIComponent(msg)}\`, "_blank");
+  const msg = `⚠️ *AVISO*\n\n👤 *Cliente:* ${c.nome}\n🖥️ *Painel:* ${c.painel}\n📅 *Vencimento:* ${c.venc?.split("-").reverse().join("/")}\n💰 *Valor:* ${money(c.plano || 0)}\n📱 *ID:* ${c.idExt || 'N/A'}`;
+  window.open(`https://wa.me/${admin}?text=${encodeURIComponent(msg)}`, "_blank");
 };
 
-// 3. FINANCEIRO E RENDERS
+// 3. DASHBOARD
 function refreshTopProfitBar() {
   const totalPlansEl = document.getElementById("top-total-plans");
   const totalCasinhasEl = document.getElementById("top-total-casinhas");
@@ -148,6 +142,7 @@ function refreshTopProfitBar() {
   totalPlansEl.textContent = money(fat); totalCasinhasEl.textContent = money(cus); realProfitEl.textContent = money(fat - cus);
 }
 
+// 4. RENDERS
 function renderClientsList() {
   const cont = document.getElementById("clients-list"); if (!cont) return;
   const q = (document.getElementById("clients-search") as HTMLInputElement)?.value.toLowerCase();
@@ -159,29 +154,28 @@ function renderClientsList() {
     if (ds && c.venc && c.venc < ds) return false;
     if (de && c.venc && c.venc > de) return false;
     if (!q) return true;
-    return c.nome?.toLowerCase().includes(q) || c.idExt?.toLowerCase().includes(q);
+    return c.nome?.toLowerCase().includes(q) || c.idExt?.toLowerCase().includes(q) || c.painel?.toLowerCase().includes(q);
   });
-  document.getElementById("clients-count")!.textContent = \`\${filtered.length}/\${clients.length}\`;
-  cont.innerHTML = filtered.map(c => \`
-    <div class="luxury-card p-5 border transition-all cursor-pointer \${selectedClientIds.has(c.id) ? 'ring-2 ring-sky-500 bg-sky-50/20' : 'border-slate-200 dark:border-slate-800 shadow-sm'}">
+  document.getElementById("clients-count")!.textContent = `${filtered.length}/${clients.length}`;
+  cont.innerHTML = filtered.map(c => `
+    <div class="luxury-card p-5 border transition-all cursor-pointer ${selectedClientIds.has(c.id) ? 'ring-2 ring-sky-500 bg-sky-50/20' : 'border-slate-200 dark:border-slate-800 shadow-sm'}">
       <div class="flex justify-between items-start">
         <div class="min-w-0 flex items-center gap-3">
-          \${bulkMode ? \`<input type="checkbox" \${selectedClientIds.has(c.id) ? 'checked' : ''} class="w-4 h-4 pointer-events-none">\` : ''}
+          ${bulkMode ? `<input type="checkbox" ${selectedClientIds.has(c.id) ? 'checked' : ''} class="w-4 h-4 pointer-events-none">` : ''}
           <div class="min-w-0">
-            <div class="font-black uppercase text-slate-800 dark:text-white truncate">\${c.nome || "Sem nome"}</div>
-            <div class="text-[9px] font-bold text-slate-400 uppercase mt-1">\${c.painel} • VENC: \${c.venc?.split("-").reverse().join("/") || "-"}</div>
-            <div class="text-[10px] font-black text-slate-500 mt-1 uppercase">ID: \${c.idExt || 'N/A'}</div>
-            <div class="text-[11px] font-black text-sky-600 mt-2">\${money(c.plano || 0)}</div>
+            <div class="font-black uppercase text-slate-800 dark:text-white truncate">${c.nome || "Sem nome"}</div>
+            <div class="text-[9px] font-bold text-slate-400 uppercase mt-1">${c.painel} • VENC: ${c.venc?.split("-").reverse().join("/") || "-"}</div>
+            <div class="text-[10px] font-black text-slate-500 mt-1 uppercase">ID: ${c.idExt || 'N/A'}</div>
+            <div class="text-[11px] font-black text-sky-600 mt-2">${money(c.plano || 0)}</div>
           </div>
         </div>
-        \${!bulkMode ? \`<div class="flex flex-col gap-2">
-            <button onclick="event.stopPropagation(); window.openEditClient('\${c.id}')" class="p-2 bg-slate-100 dark:bg-slate-800 rounded-xl text-slate-500"><i data-lucide="edit-3" class="w-4 h-4"></i></button>
-            <button onclick="event.stopPropagation(); window.deleteClient('\${c.id}')" class="p-2 bg-red-50 rounded-xl text-red-500"><i data-lucide="trash-2" class="w-4 h-4"></i></button>
-          </div>\` : ''}
+        ${!bulkMode ? `<div class="flex flex-col gap-2">
+            <button onclick="event.stopPropagation(); window.openEditClient('${c.id}')" class="p-2 bg-slate-100 dark:bg-slate-800 rounded-xl text-slate-500"><i data-lucide="edit-3" class="w-4 h-4"></i></button>
+            <button onclick="event.stopPropagation(); window.deleteClient('${c.id}')" class="p-2 bg-red-50 rounded-xl text-red-500"><i data-lucide="trash-2" class="w-4 h-4"></i></button>
+          </div>` : ''}
       </div>
-    </div>\`).join('');
+    </div>`).join('');
   
-  // Lógica de clique para seleção
   if(bulkMode) {
     cont.querySelectorAll('.luxury-card').forEach((div, i) => {
       div.addEventListener('click', () => {
@@ -195,7 +189,7 @@ function renderClientsList() {
   createIcons({ icons });
 }
 
-// 4. INICIALIZAÇÃO
+// 5. INICIALIZAÇÃO
 export function installLegacyApp() {
   firebaseApi.onAuthStateChanged(auth, (user) => {
     if (user) {
@@ -207,7 +201,7 @@ export function installLegacyApp() {
         refreshTopProfitBar(); checkAndNotify(); renderClientsList();
         const grid = document.getElementById('dash-server-checkboxes');
         if (grid) {
-          grid.innerHTML = ALL_SERVERS.map(s => \`<label class="flex items-center gap-2 p-2 hover:bg-slate-100 dark:hover:bg-slate-700 rounded-xl cursor-pointer"><input type="checkbox" value="\${s}" class="dash-panel-check w-4 h-4" \${dashSettings.selectedPanels.includes(s) ? 'checked' : ''}><span class="text-[10px] font-black uppercase">\${s}</span></label>\`).join('');
+          grid.innerHTML = ALL_SERVERS.map(s => `<label class="flex items-center gap-2 p-2 hover:bg-slate-100 dark:hover:bg-slate-700 rounded-xl cursor-pointer"><input type="checkbox" value="${s}" class="dash-panel-check w-4 h-4" ${dashSettings.selectedPanels.includes(s) ? 'checked' : ''}><span class="text-[10px] font-black uppercase">${s}</span></label>`).join('');
           const admInput = document.getElementById('admin-phone') as HTMLInputElement;
           if(admInput) admInput.value = dashSettings.adminPhone;
         }
@@ -219,10 +213,14 @@ export function installLegacyApp() {
 }
 
 // Extras
-window.handleAuth = async (m) => {
-  const e = (document.getElementById("auth-email") as HTMLInputElement).value;
-  const p = (document.getElementById("auth-password") as HTMLInputElement).value;
-  try { if (m === "login") await firebaseApi.signInWithEmailAndPassword(auth, e, p); } catch { alert("Login Falhou."); }
+window.saveDashSettings = () => {
+  const admin = (document.getElementById('admin-phone') as HTMLInputElement).value;
+  localStorage.setItem("adminPhone", admin); dashSettings.adminPhone = admin;
+  dashSettings.period = (document.getElementById('dash-setting-period') as HTMLSelectElement).value;
+  dashSettings.startDate = (document.getElementById('dash-start') as HTMLInputElement).value;
+  dashSettings.endDate = (document.getElementById('dash-end') as HTMLInputElement).value;
+  const sel: string[] = []; document.querySelectorAll('.dash-panel-check:checked').forEach((el: any) => sel.push(el.value));
+  dashSettings.selectedPanels = sel; window.toggleModal('dash-settings-modal'); refreshTopProfitBar();
 };
 window.logout = () => { firebaseApi.signOut(auth); window.location.reload(); };
 window.toggleModal = (id) => document.getElementById(id)?.classList.toggle("active");
@@ -259,14 +257,10 @@ window.saveClient = async () => {
 window.deleteClient = async (id) => { if (confirm("Excluir?")) await firebaseApi.deleteDoc(firebaseApi.doc(db, "artifacts", appId, "users", currentUserId!, "clients", id)); };
 window.toggleBulkSelectClients = (f) => { bulkMode = f ?? !bulkMode; selectedClientIds.clear(); document.getElementById("clients-bulkbar")?.classList.toggle("hidden", !bulkMode); renderClientsList(); };
 window.bulkSelectAllFilteredClients = () => { getFilteredClients().forEach(c => selectedClientIds.add(c.id)); renderClientsList(); };
-window.bulkDeleteSelectedClients = async () => { if (confirm(\`Excluir \${selectedClientIds.size} selecionados?\`)) { for (const id of selectedClientIds) await firebaseApi.deleteDoc(firebaseApi.doc(db, "artifacts", appId, "users", currentUserId!, "clients", id)); window.toggleBulkSelectClients(false); } };
-window.saveDashSettings = () => {
-  const admin = (document.getElementById('admin-phone') as HTMLInputElement).value;
-  localStorage.setItem("adminPhone", admin); dashSettings.adminPhone = admin;
-  dashSettings.period = (document.getElementById('dash-setting-period') as HTMLSelectElement).value;
-  dashSettings.startDate = (document.getElementById('dash-start') as HTMLInputElement).value;
-  dashSettings.endDate = (document.getElementById('dash-end') as HTMLInputElement).value;
-  const sel: string[] = []; document.querySelectorAll('.dash-panel-check:checked').forEach((el: any) => sel.push(el.value));
-  dashSettings.selectedPanels = sel; window.toggleModal('dash-settings-modal'); refreshTopProfitBar();
-};
+window.bulkDeleteSelectedClients = async () => { if (confirm(`Excluir selecionados?`)) { for (const id of selectedClientIds) await firebaseApi.deleteDoc(firebaseApi.doc(db, "artifacts", appId, "users", currentUserId!, "clients", id)); window.toggleBulkSelectClients(false); } };
 window.openImportClients = () => window.toggleModal("import-modal");
+window.handleAuth = async (m) => {
+  const e = (document.getElementById("auth-email") as HTMLInputElement).value;
+  const p = (document.getElementById("auth-password") as HTMLInputElement).value;
+  try { if (m === "login") await firebaseApi.signInWithEmailAndPassword(auth, e, p); } catch (err: any) { alert("Login Falhou."); }
+};
