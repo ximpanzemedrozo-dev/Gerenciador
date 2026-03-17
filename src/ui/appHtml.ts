@@ -8,7 +8,7 @@ export const appHtml = `
       <div class="space-y-4">
         <input type="email" id="auth-email" placeholder="E-mail Administrativo" class="input-box">
         <input type="password" id="auth-password" placeholder="Chave de Acesso" class="input-box">
-        <button onclick="window.handleAuth('login')" class="w-full bg-sky-500 text-white py-4 rounded-2xl font-black uppercase tracking-widest shadow-md">Entrar</button>
+        <button onclick="window.handleAuth('login')" class="w-full bg-sky-500 text-white py-4 rounded-2xl font-black uppercase tracking-widest shadow-md active:scale-95 transition-transform">Entrar</button>
       </div>
     </div>
   </section>
@@ -35,11 +35,11 @@ export const appHtml = `
         </button>
         <div class="rounded-3xl border border-slate-200 bg-white/95 dark:bg-slate-900/90 p-4 shadow-sm">
           <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
-            <div><div class="text-[10px] font-black uppercase text-slate-400 mb-1">Custo Selecionado</div><div id="top-total-casinhas" class="text-2xl font-black text-rose-500">R$ 0,00</div></div>
+            <div><div class="text-[10px] font-black uppercase text-slate-400 mb-1">Custo Dashboard</div><div id="top-total-casinhas" class="text-2xl font-black text-rose-500">R$ 0,00</div></div>
             <div><div class="text-[10px] font-black uppercase text-slate-400 mb-1">Faturamento Bruto</div><div id="top-total-plans" class="text-2xl font-black text-slate-900 dark:text-white">R$ 0,00</div></div>
             <div><div class="text-[10px] font-black uppercase text-slate-400 mb-1">Lucro Real</div><div id="top-real-profit" class="text-2xl font-black text-emerald-600">R$ 0,00</div></div>
           </div>
-          <div id="dash-info-text" class="text-[8px] font-bold text-slate-400 uppercase mt-2 border-t pt-2 dark:border-slate-800 italic">Sincronizando Dashboard...</div>
+          <div id="dash-info-text" class="text-[8px] font-bold text-slate-400 uppercase mt-2 border-t pt-2 dark:border-slate-800 italic text-center">Dashboard Atualizada</div>
         </div>
       </div>
     </div>
@@ -104,7 +104,7 @@ export const appHtml = `
 
   <div id="notification-modal" class="modal-overlay" onclick="window.toggleModal('notification-modal')">
     <div class="bg-white dark:bg-slate-900 w-full max-w-lg rounded-[2.5rem] p-6 shadow-3xl max-h-[80vh] overflow-y-auto" onclick="event.stopPropagation()">
-      <h2 class="text-xl font-black uppercase text-sky-600 mb-6 italic text-center">Alertas Hoje e Amanhã</h2>
+      <h2 class="text-xl font-black uppercase text-sky-600 mb-6 italic text-center">Vencimentos Hoje e Amanhã</h2>
       <div id="notif-list" class="space-y-3"></div>
       <button onclick="window.toggleModal('notification-modal')" class="w-full bg-slate-100 dark:bg-slate-800 text-slate-500 py-4 rounded-2xl font-black uppercase mt-8">Fechar</button>
     </div>
@@ -114,7 +114,7 @@ export const appHtml = `
     <div class="bg-white dark:bg-slate-900 w-full max-w-xl rounded-[2.5rem] p-6 shadow-3xl" onclick="event.stopPropagation()">
       <h2 class="text-xl font-black uppercase text-sky-600 mb-6 italic text-center">Configurações</h2>
       <div class="space-y-4">
-        <div><label class="text-[10px] font-black uppercase text-slate-400 mb-2 block">WhatsApp Admin</label><input type="text" id="admin-phone" class="input-box" placeholder="5511999999999"></div>
+        <div><label class="text-[10px] font-black uppercase text-slate-400 mb-2 block">Seu WhatsApp (Admin)</label><input type="text" id="admin-phone" class="input-box" placeholder="5511999999999"></div>
         <div><label class="text-[10px] font-black uppercase text-slate-400 mb-2 block">Período Dashboard</label>
           <select id="dash-setting-period" class="filter-select p-3 h-12" onchange="window.toggleDashCustomDates(this.value)">
             <option value="current_month">Vencimentos deste Mês</option><option value="all_time">Toda a Base</option><option value="custom">Período Personalizado</option>
