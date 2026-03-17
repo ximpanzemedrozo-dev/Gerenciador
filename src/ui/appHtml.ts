@@ -104,7 +104,7 @@ export const appHtml = `
 
   <div id="notification-modal" class="modal-overlay" onclick="window.toggleModal('notification-modal')">
     <div class="bg-white dark:bg-slate-900 w-full max-w-lg rounded-[2.5rem] p-6 shadow-3xl max-h-[80vh] overflow-y-auto" onclick="event.stopPropagation()">
-      <h2 class="text-xl font-black uppercase text-sky-600 mb-6 italic text-center">Avisos Hoje e Amanhã</h2>
+      <h2 class="text-xl font-black uppercase text-sky-600 mb-6 italic text-center">Alertas Hoje e Amanhã</h2>
       <div id="notif-list" class="space-y-3"></div>
       <button onclick="window.toggleModal('notification-modal')" class="w-full bg-slate-100 dark:bg-slate-800 text-slate-500 py-4 rounded-2xl font-black uppercase mt-8">Fechar</button>
     </div>
@@ -114,17 +114,17 @@ export const appHtml = `
     <div class="bg-white dark:bg-slate-900 w-full max-w-xl rounded-[2.5rem] p-6 shadow-3xl" onclick="event.stopPropagation()">
       <h2 class="text-xl font-black uppercase text-sky-600 mb-6 italic text-center">Configurações</h2>
       <div class="space-y-4">
-        <div><label class="text-[10px] font-black uppercase text-slate-400 mb-2 block">Seu WhatsApp (Admin)</label><input type="text" id="admin-phone" class="input-box" placeholder="5511999999999"></div>
-        <div><label class="text-[10px] font-black uppercase text-slate-400 mb-2 block">Período de Cálculo</label>
+        <div><label class="text-[10px] font-black uppercase text-slate-400 mb-2 block">WhatsApp Admin</label><input type="text" id="admin-phone" class="input-box" placeholder="5511999999999"></div>
+        <div><label class="text-[10px] font-black uppercase text-slate-400 mb-2 block">Período Dashboard</label>
           <select id="dash-setting-period" class="filter-select p-3 h-12" onchange="window.toggleDashCustomDates(this.value)">
-            <option value="current_month">Apenas Vencimentos deste Mês</option><option value="all_time">Toda a Base</option><option value="custom">Período Personalizado</option>
+            <option value="current_month">Vencimentos deste Mês</option><option value="all_time">Toda a Base</option><option value="custom">Período Personalizado</option>
           </select>
         </div>
         <div id="dash-custom-dates" class="hidden grid grid-cols-2 gap-3">
-          <div><label class="text-[10px] font-black uppercase text-slate-400 mb-1 block">Venc. De</label><input type="date" id="dash-start" class="input-box" /></div>
-          <div><label class="text-[10px] font-black uppercase text-slate-400 mb-1 block">Venc. Até</label><input type="date" id="dash-end" class="input-box" /></div>
+          <div><label class="text-[10px] font-black uppercase text-slate-400 mb-1 block">De</label><input type="date" id="dash-start" class="input-box" /></div>
+          <div><label class="text-[10px] font-black uppercase text-slate-400 mb-1 block">Até</label><input type="date" id="dash-end" class="input-box" /></div>
         </div>
-        <div><label class="text-[10px] font-black uppercase text-slate-400 mb-2 block">Filtrar Painéis Dashboard</label>
+        <div><label class="text-[10px] font-black uppercase text-slate-400 mb-2 block">Filtro de Servidores (Dashboard)</label>
           <div class="grid grid-cols-2 gap-2 max-h-40 overflow-y-auto p-3 border dark:border-slate-800 rounded-2xl bg-slate-50 dark:bg-slate-800/50" id="dash-server-checkboxes"></div>
         </div>
       </div>
@@ -158,10 +158,10 @@ export const appHtml = `
   <div id="import-modal" class="modal-overlay" onclick="window.toggleModal('import-modal')">
     <div class="bg-white dark:bg-slate-900 w-full max-w-2xl rounded-[2.5rem] p-6 shadow-3xl" onclick="event.stopPropagation()">
       <h2 class="text-2xl font-black italic uppercase text-sky-600 mb-6 text-center">Importação Inteligente</h2>
-      <textarea id="import-text" class="w-full h-48 border dark:border-slate-700 rounded-2xl p-4 font-mono text-[10px] mb-4 outline-none dark:bg-slate-800" placeholder="Cole o texto bruto do painel aqui..."></textarea>
+      <textarea id="import-text" class="w-full h-48 border dark:border-slate-700 rounded-2xl p-4 font-mono text-[10px] mb-4 outline-none dark:bg-slate-800" placeholder="Cole o texto bruto aqui..."></textarea>
       <div class="grid grid-cols-1 md:grid-cols-2 gap-3">
         <button onclick="window.importClientsWithAI()" class="w-full bg-sky-500 text-white py-4 rounded-xl font-black uppercase text-[11px] shadow-lg active:scale-95 transition-transform">Limpar e Importar c/ IA ✨</button>
-        <button onclick="window.importClientsFromText()" class="w-full bg-emerald-600 text-white py-4 rounded-xl font-black uppercase text-[11px] shadow-lg active:scale-95 transition-transform">Importação Padrão</button>
+        <button onclick="window.toggleModal('import-modal')" class="w-full bg-slate-200 text-slate-500 py-4 rounded-xl font-black uppercase text-[11px]">Cancelar</button>
       </div>
     </div>
   </div>
